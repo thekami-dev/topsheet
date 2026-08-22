@@ -1,0 +1,10 @@
+[tools]
+java = "17.0.0"
+
+[tasks.dev]
+description = "Kill stale emulator, boot buskhoja AVD, flutter run"
+run = "bash scripts/dev.sh"
+
+[tasks.build]
+description = "Pick build target with gum, then flutter build"
+run = "bash scripts/build.sh"
