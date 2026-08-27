@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../core/motion.dart';
 import 'pressable.dart';
 
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+ * design-system: design.md · designed-as-app
+ */
+
 Future<T?> showSearchablePicker<T>({
   required BuildContext context,
   required String title,
@@ -85,6 +89,7 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
                     widget.title,
                     style: textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
+                      letterSpacing: -0.1,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -92,6 +97,7 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
                     'Type to filter and pick quickly',
                     style: textTheme.bodySmall?.copyWith(
                       color: scheme.onSurfaceVariant,
+                      letterSpacing: 0.06,
                     ),
                   ),
                   const SizedBox(height: 10),

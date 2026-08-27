@@ -20,6 +20,10 @@ import '../widgets/recall_text_field.dart';
 import '../widgets/searchable_picker.dart';
 import 'settings_screen.dart';
 
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+ * design-system: design.md · designed-as-app
+ */
+
 enum _FabState { idle, generating, done }
 
 class HomeScreen extends StatefulWidget {
@@ -368,6 +372,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await Printing.sharePdf(bytes: bytes, filename: _pdfFileNameFor(name));
   }
 
+  Future<void> _savePdf(Uint8List bytes, String name) async {
+    final ok = await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      name: _pdfFileNameFor(name),
+      dynamicLayout: false,
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(ok ? 'Save dialog completed' : 'Save dialog canceled'),
+      ),
+    );
+  }
+
   Future<void> _showPdfSheet(Uint8List bytes, String name) {
     final scheme = Theme.of(context).colorScheme;
     final title = name.isEmpty ? 'Topsheet' : name;
@@ -407,7 +425,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Generated successfully. Preview, then share instantly.',
+                                'Generated successfully. Preview, then share or save.',
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
                                       color: scheme.onPrimaryContainer
@@ -417,36 +435,83 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             ],
                           ),
                         ),
-                        Pressable(
-                          onTap: () => _sharePdf(bytes, title),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: scheme.primary,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.share_rounded,
-                                  size: 18,
-                                  color: scheme.onPrimary,
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            Pressable(
+                              onTap: () => _savePdf(bytes, title),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Share',
-                                  style: Theme.of(context).textTheme.labelLarge
-                                      ?.copyWith(
-                                        color: scheme.onPrimary,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                                decoration: BoxDecoration(
+                                  color: scheme.primaryContainer,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: scheme.primary.withValues(
+                                      alpha: 0.35,
+                                    ),
+                                  ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.download_rounded,
+                                      size: 18,
+                                      color: scheme.primary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Save',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: scheme.primary,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                            Pressable(
+                              onTap: () => _sharePdf(bytes, title),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: scheme.primary,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.share_rounded,
+                                      size: 18,
+                                      color: scheme.onPrimary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Share',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelLarge
+                                          ?.copyWith(
+                                            color: scheme.onPrimary,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -458,16 +523,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               padding: const EdgeInsets.fromLTRB(16, 2, 8, 8),
               child: Row(
                 children: [
-                  Pressable(
-                    onTap: () => _sharePdf(bytes, title),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.ios_share_rounded,
-                        color: scheme.primary,
-                      ),
-                    ),
-                  ),
                   const SizedBox(width: 2),
                   Expanded(
                     child: Text(
@@ -487,29 +542,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ],
               ),
             ),
-            Expanded(
-              child: PdfPreview(
-                build: (format) async => bytes,
-                canChangeOrientation: false,
-                canChangePageFormat: false,
-                canDebug: false,
-                scrollViewDecoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
+              Expanded(
+                child: PdfPreview(
+                  build: (format) async => bytes,
+                  canChangeOrientation: false,
+                  canChangePageFormat: false,
+                  canDebug: false,
+                  useActions: false,
+                  scrollViewDecoration: const BoxDecoration(
+                    color: Colors.white,
+                  ),
+                  pdfPreviewPageDecoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color.fromRGBO(0, 0, 0, 0.15),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                  allowSharing: false,
+                  allowPrinting: false,
+                  pdfFileName: _pdfFileNameFor(title),
                 ),
-                pdfPreviewPageDecoration: BoxDecoration(
-                  color: scheme.surface,
-                  boxShadow: [
-                    BoxShadow(
-                      color: scheme.shadow.withValues(alpha: 0.15),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                allowSharing: true,
-                allowPrinting: false,
-                pdfFileName: _pdfFileNameFor(title),
               ),
-            ),
           ],
         ),
       ),
@@ -623,6 +679,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         )
                       : const SizedBox.shrink(),
                 ),
+                _StatusBoard(
+                  entries: [
+                    _StatusEntry(
+                      label: 'Department',
+                      value: _data.department?.shortName,
+                    ),
+                    _StatusEntry(label: 'Subject', value: _data.subject?.name),
+                    _StatusEntry(
+                      label: 'Semester',
+                      value: _data.semester.isEmpty ? null : _data.semester,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
                 _Section(
                   title: 'Course',
                   children: [
@@ -1175,4 +1245,75 @@ class _BlurOrb extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _StatusEntry {
+  final String label;
+  final String? value;
+
+  const _StatusEntry({required this.label, required this.value});
+}
+
+class _StatusBoard extends StatelessWidget {
+  final List<_StatusEntry> entries;
+
+  const _StatusBoard({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.34),
+        ),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < entries.length; i++) ...[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entries[i].label.toUpperCase(),
+                    style: textTheme.labelSmall?.copyWith(
+                      letterSpacing: 0.82,
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    entries[i].value ?? 'Not selected',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: entries[i].value == null
+                          ? scheme.onSurfaceVariant
+                          : scheme.onSurface,
+                      fontWeight: entries[i].value == null
+                          ? FontWeight.w400
+                          : FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (i < entries.length - 1)
+              Container(
+                width: 1,
+                height: 30,
+                margin: const EdgeInsets.symmetric(horizontal: 10),
+                color: scheme.outlineVariant.withValues(alpha: 0.45),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
 }

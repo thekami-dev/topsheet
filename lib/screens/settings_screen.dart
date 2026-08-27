@@ -7,6 +7,10 @@ import 'package:printing/printing.dart';
 import '../data/recall_store.dart';
 import '../widgets/pressable.dart';
 
+/* Hallmark · genre: modern-minimal · macrostructure: Long Document
+ * design-system: design.md · designed-as-app
+ */
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -42,6 +46,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     final bytes = await file.readAsBytes();
     await Printing.layoutPdf(onLayout: (_) => bytes);
+  }
+
+  Future<void> _save(Map<String, dynamic> entry) async {
+    final file = File(entry['path'] as String);
+    if (!await file.exists()) return;
+    final bytes = await file.readAsBytes();
+    await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      name: '${entry['name']}.pdf',
+      dynamicLayout: false,
+    );
   }
 
   Future<void> _share(Map<String, dynamic> entry) async {
@@ -187,30 +202,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 ),
                               ),
-                              trailing: Wrap(
-                                spacing: 2,
+                              trailing: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
-                                  Pressable(
+                                  _IconAction(
+                                    icon: Icons.visibility_outlined,
                                     onTap: () => _open(_recents[i]),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8),
-                                      child: Icon(
-                                        Icons.visibility_outlined,
-                                        size: 20,
-                                        color: scheme.primary,
-                                      ),
-                                    ),
                                   ),
-                                  Pressable(
+                                  _IconAction(
+                                    icon: Icons.download_rounded,
+                                    onTap: () => _save(_recents[i]),
+                                  ),
+                                  _IconAction(
+                                    icon: Icons.share_outlined,
                                     onTap: () => _share(_recents[i]),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8),
-                                      child: Icon(
-                                        Icons.share_outlined,
-                                        size: 20,
-                                        color: scheme.primary,
-                                      ),
-                                    ),
+                                    primary: true,
                                   ),
                                 ],
                               ),
@@ -225,6 +231,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _IconAction extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool primary;
+
+  const _IconAction({
+    required this.icon,
+    required this.onTap,
+    this.primary = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Pressable(
+      pressedScale: 0.92,
+      onTap: onTap,
+      child: Container(
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: primary
+              ? scheme.primaryContainer.withValues(alpha: 0.75)
+              : scheme.surface.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: primary
+                ? scheme.primary.withValues(alpha: 0.3)
+                : scheme.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: scheme.primary,
+        ),
       ),
     );
   }

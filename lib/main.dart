@@ -4,10 +4,14 @@ import 'package:flutter/material.dart';
 
 import 'screens/home_screen.dart';
 
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+ * design-system: design.md · designed-as-app
+ */
+
 void main() => runApp(const TopsheetApp());
 
 /// Fallback seed used when dynamic platform colors are unavailable.
-const _fallbackSeed = Color(0xFF0F7C67);
+const _fallbackSeed = Color(0xFF127A6C);
 
 class TopsheetApp extends StatelessWidget {
   const TopsheetApp({super.key});
@@ -96,6 +100,19 @@ class TopsheetApp extends StatelessWidget {
                 ),
               ),
             ),
+            listTileTheme: ListTileThemeData(
+              iconColor: scheme.onSurfaceVariant,
+              titleTextStyle: textTheme.bodyLarge?.copyWith(
+                color: scheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+              subtitleTextStyle: textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
             inputDecorationTheme: InputDecorationTheme(
               filled: true,
               fillColor: scheme.surfaceContainerHighest.withValues(
@@ -147,6 +164,9 @@ class TopsheetApp extends StatelessWidget {
               extendedPadding: const EdgeInsets.symmetric(horizontal: 20),
               backgroundColor: scheme.primary,
               foregroundColor: scheme.onPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
             ),
             snackBarTheme: SnackBarThemeData(
               behavior: SnackBarBehavior.floating,

@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../core/motion.dart';
 import '../data/recall_store.dart';
 
+/* Hallmark · genre: modern-minimal · macrostructure: Workbench
+ * design-system: design.md · designed-as-app
+ */
+
 /// TextField that suggests previously-typed values for [field] as you type.
 ///
 /// Uses [RawAutocomplete] bound to the caller-owned [controller], so there
