@@ -1,15 +1,23 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:printing/printing.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/recall_store.dart';
 import '../widgets/pressable.dart';
 
-/* Hallmark · genre: modern-minimal · macrostructure: Long Document
+/* Hallmark · genre: dark-premium · macrostructure: Long Document
  * design-system: design.md · designed-as-app
  */
+
+const _kGithubRepo = 'https://github.com/thekami-dev/topsheet'\;
+const _kGithubOrg = 'https://github.com/thekami-dev'\;
+const _kDiscord = 'https://www.thekami.tech/discord/'\;
+const _kLinkedIn = 'https://www.linkedin.com/company/thekamiofficial'\;
+const _kInstagram = 'https://www.instagram.com/thekami_official'\;
+const _kFacebook = 'https://www.facebook.com/thekamidev/'\;
+const _kSupport = 'https://www.supportkori.com/thekami'\;
+const _kThekamiSite = 'https://www.thekami.tech'\;
+const _kThekamiLogo = 'assets/images/thekami_logo.png';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,51 +27,110 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _df = DateFormat('dd MMM yyyy, HH:mm');
-  List<Map<String, dynamic>> _recents = [];
+  PackageInfo? _packageInfo;
 
   @override
   void initState() {
     super.initState();
-    _loadRecents();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _packageInfo = info);
+    });
   }
 
-  Future<void> _loadRecents() async {
-    final recents = await RecallStore.instance.recentPdfs();
-    if (mounted) setState(() => _recents = recents);
-  }
-
-  Future<void> _open(Map<String, dynamic> entry) async {
-    final file = File(entry['path'] as String);
-    if (!await file.exists()) {
-      await RecallStore.instance.removeRecentPdf(entry['path'] as String);
-      if (!mounted) return;
-      _loadRecents();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('That PDF is no longer available')),
-      );
-      return;
+  Future<void> _launch(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not open $url')));
     }
-    final bytes = await file.readAsBytes();
-    await Printing.layoutPdf(onLayout: (_) => bytes);
   }
 
-  Future<void> _save(Map<String, dynamic> entry) async {
-    final file = File(entry['path'] as String);
-    if (!await file.exists()) return;
-    final bytes = await file.readAsBytes();
-    await Printing.layoutPdf(
-      onLayout: (_) async => bytes,
-      name: '${entry['name']}.pdf',
-      dynamicLayout: false,
+  void _showAbout() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
+        final version = _packageInfo != null
+            ? 'v${_packageInfo!.version} (${_packageInfo!.buildNumber})'
+            : '…';
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: scheme.outlineVariant),
+                      ),
+                      child: Icon(
+                        Icons.description_outlined,
+                        color: scheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Topsheet',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          Text(
+                            version,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Generate clean, share-ready practical sheets for course '
+                  'submissions — pick a department and subject, fill in '
+                  'student and teacher details, and export a ready-to-print '
+                  'PDF in seconds.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 20),
+                Divider(color: scheme.outlineVariant, height: 1),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      'Made by',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(width: 8),
+                    Pressable(
+                      onTap: () => _launch(_kThekamiSite),
+                      child: Image.asset(_kThekamiLogo, height: 18),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
-  }
-
-  Future<void> _share(Map<String, dynamic> entry) async {
-    final file = File(entry['path'] as String);
-    if (!await file.exists()) return;
-    final bytes = await file.readAsBytes();
-    await Printing.sharePdf(bytes: bytes, filename: '${entry['name']}.pdf');
   }
 
   @override
@@ -71,164 +138,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: Stack(
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  scheme.surface,
-                  scheme.surfaceContainerLow.withValues(alpha: 0.9),
+          _SettingsGroup(
+            title: 'General',
+            children: [
+              _SettingsTile(
+                icon: Icons.history_toggle_off_outlined,
+                title: 'Clear remembered values',
+                subtitle:
+                    'Forgets saved teacher, student, and batch suggestions',
+                onTap: () async {
+                  await RecallStore.instance.clearAll();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Cleared remembered values'),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsGroup(
+            title: 'About',
+            children: [
+              _SettingsTile(
+                icon: Icons.info_outline_rounded,
+                title: 'About Topsheet',
+                subtitle: 'Version, usage, and app details',
+                onTap: _showAbout,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsGroup(
+            title: 'Community',
+            children: [
+              _SettingsTile(
+                icon: Icons.discord,
+                title: 'Discord',
+                subtitle: 'Join the Thekami community',
+                onTap: () => _launch(_kDiscord),
+              ),
+              _SettingsTile(
+                icon: Icons.business_center_outlined,
+                title: 'LinkedIn',
+                onTap: () => _launch(_kLinkedIn),
+              ),
+              _SettingsTile(
+                icon: Icons.camera_alt_outlined,
+                title: 'Instagram',
+                onTap: () => _launch(_kInstagram),
+              ),
+              _SettingsTile(
+                icon: Icons.facebook_outlined,
+                title: 'Facebook',
+                onTap: () => _launch(_kFacebook),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsGroup(
+            title: 'Open Source',
+            children: [
+              _SettingsTile(
+                icon: Icons.code_rounded,
+                title: 'View source on GitHub',
+                subtitle: 'Topsheet is free and open source',
+                onTap: () => _launch(_kGithubRepo),
+              ),
+              _SettingsTile(
+                icon: Icons.corporate_fare_rounded,
+                title: 'Thekami on GitHub',
+                onTap: () => _launch(_kGithubOrg),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsGroup(
+            title: 'Support',
+            children: [
+              _SettingsTile(
+                icon: Icons.favorite_outline_rounded,
+                title: 'Support this project',
+                subtitle: 'Help keep Thekami\'s apps free',
+                onTap: () => _launch(_kSupport),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          Center(
+            child: Pressable(
+              onTap: () => _launch(_kThekamiSite),
+              child: Column(
+                children: [
+                  Text(
+                    'MADE BY',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Image.asset(_kThekamiLogo, height: 22),
                 ],
               ),
             ),
-            child: const SizedBox.expand(),
-          ),
-          ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.32),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Memory',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        letterSpacing: 0.9,
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Pressable(
-                      pressedScale: 0.99,
-                      onTap: () async {
-                        await RecallStore.instance.clearAll();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Cleared remembered values'),
-                            ),
-                          );
-                        }
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHigh.withValues(
-                            alpha: 0.7,
-                          ),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: scheme.outlineVariant.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: const ListTile(
-                          leading: Icon(Icons.history_toggle_off_outlined),
-                          title: Text('Clear remembered values'),
-                          subtitle: Text(
-                            'Forgets saved teacher, student, and batch suggestions',
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (_recents.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: scheme.surface.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: scheme.outlineVariant.withValues(alpha: 0.32),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'RECENT PDFS',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.85,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      for (var i = 0; i < _recents.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 8),
-                        Pressable(
-                          pressedScale: 0.99,
-                          onTap: () => _open(_recents[i]),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: scheme.surfaceContainerHigh.withValues(
-                                alpha: 0.62,
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: scheme.outlineVariant.withValues(
-                                  alpha: 0.26,
-                                ),
-                              ),
-                            ),
-                            child: ListTile(
-                              leading: const Icon(
-                                Icons.picture_as_pdf_outlined,
-                              ),
-                              title: Text(
-                                (_recents[i]['name'] as String).isEmpty
-                                    ? 'Topsheet'
-                                    : _recents[i]['name'] as String,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                _df.format(
-                                  DateTime.parse(
-                                    _recents[i]['generatedAt'] as String,
-                                  ),
-                                ),
-                              ),
-                              trailing: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  _IconAction(
-                                    icon: Icons.visibility_outlined,
-                                    onTap: () => _open(_recents[i]),
-                                  ),
-                                  _IconAction(
-                                    icon: Icons.download_rounded,
-                                    onTap: () => _save(_recents[i]),
-                                  ),
-                                  _IconAction(
-                                    icon: Icons.share_outlined,
-                                    onTap: () => _share(_recents[i]),
-                                    primary: true,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ],
           ),
         ],
       ),
@@ -236,42 +255,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-class _IconAction extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool primary;
+class _SettingsGroup extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
 
-  const _IconAction({
+  const _SettingsGroup({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8, left: 2),
+          child: Text(
+            title.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.9,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                children[i],
+                if (i < children.length - 1)
+                  Divider(
+                    height: 1,
+                    indent: 16,
+                    endIndent: 16,
+                    color: scheme.outlineVariant,
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  const _SettingsTile({
     required this.icon,
+    required this.title,
+    this.subtitle,
     required this.onTap,
-    this.primary = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Pressable(
-      pressedScale: 0.92,
+    return InkWell(
       onTap: onTap,
-      child: Container(
-        width: 34,
-        height: 34,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: primary
-              ? scheme.primaryContainer.withValues(alpha: 0.75)
-              : scheme.surface.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: primary
-                ? scheme.primary.withValues(alpha: 0.3)
-                : scheme.outlineVariant.withValues(alpha: 0.4),
-          ),
-        ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: scheme.primary,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: scheme.onSurfaceVariant,
+            ),
+          ],
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -83,6 +84,64 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return map;
   }
 
+  Future<void> _showPreview(Uint8List bytes, String name) {
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => DraggableScrollableSheet(
+        initialChildSize: 0.92,
+        minChildSize: 0.6,
+        maxChildSize: 0.96,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: PdfPreview(
+                build: (format) async => bytes,
+                canChangeOrientation: false,
+                canChangePageFormat: false,
+                canDebug: false,
+                useActions: false,
+                scrollViewDecoration: const BoxDecoration(color: Colors.white),
+                pdfPreviewPageDecoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color.fromRGBO(0, 0, 0, 0.15),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                allowSharing: false,
+                allowPrinting: false,
+                pdfFileName: '\$name.pdf',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showActions(Map<String, dynamic> entry) async {
     final path = entry['path'] as String;
     final name = entry['name'] as String? ?? 'Topsheet';
@@ -114,6 +173,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ),
             ),
             const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.visibility_outlined),
+              title: const Text('Open'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                final bytes = await File(path).readAsBytes();
+                if (!mounted) return;
+                _showPreview(bytes, name);
+              },
+            ),
             ListTile(
               leading: const Icon(Icons.share_rounded),
               title: const Text('Share'),
