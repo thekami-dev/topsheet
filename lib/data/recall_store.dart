@@ -122,9 +122,14 @@ class RecallStore {
     return entry?.cast<String, String>();
   }
 
-  static const _maxRecentPdfs = 10;
+  // Practically unlimited for a personal-use app — this is a library now,
+  // not a "last few" cache. Cap exists only to stop unbounded growth.
+  static const _maxRecentPdfs = 500;
 
-  /// Recent generated PDFs, newest first: `{path, name, generatedAt}`.
+  /// Recent generated PDFs, newest first:
+  /// `{path, name, generatedAt, formData}` — formData is the full
+  /// TopsheetData snapshot (as JSON) so a saved topsheet can be reopened
+  /// for editing, not just viewed/shared.
   Future<List<Map<String, dynamic>>> recentPdfs() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('recentPdfs');
@@ -134,10 +139,19 @@ class RecallStore {
 
   /// Records a newly-saved PDF and returns the paths of any entries dropped
   /// off the end of the cap, so the caller can delete those files too.
-  Future<List<String>> addRecentPdf({required String path, required String name}) async {
+  Future<List<String>> addRecentPdf({
+    required String path,
+    required String name,
+    Map<String, dynamic>? formData,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final list = await recentPdfs();
-    list.insert(0, {'path': path, 'name': name, 'generatedAt': DateTime.now().toIso8601String()});
+    list.insert(0, {
+      'path': path,
+      'name': name,
+      'generatedAt': DateTime.now().toIso8601String(),
+      'formData': formData,
+    });
     final dropped = <String>[];
     while (list.length > _maxRecentPdfs) {
       dropped.add(list.removeLast()['path'] as String);
