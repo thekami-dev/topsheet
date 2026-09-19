@@ -189,7 +189,7 @@ class TopsheetApp extends StatelessWidget {
         ),
       ),
       splashFactory: InkSparkle.splashFactory,
-      pageTransitionsTheme: const PageTransitionsTheme(
+      pageTransitionsTheme: PageTransitionsTheme(
         builders: {
           TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
           TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
