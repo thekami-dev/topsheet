@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_bg_light" />
-    <item android:bottom="150dp">
+    <item android:bottom="140dp">
         <bitmap android:gravity="center" android:src="@mipmap/ic_launcher" />
     </item>
     <item
-        android:width="180dp"
-        android:height="54dp"
+        android:width="120dp"
+        android:height="36dp"
         android:gravity="bottom|center_horizontal"
-        android:bottom="70dp">
+        android:bottom="80dp">
         <bitmap android:gravity="fill" android:src="@drawable/thekami_logo" />
     </item>
 </layer-list>
