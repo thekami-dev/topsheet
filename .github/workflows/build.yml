@@ -40,17 +40,25 @@ jobs:
           storeFile=release.keystore
           PROPS
 
-      - name: Build release APK (split per ABI + shrink)
-        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/debug-info
-
-      - name: Build release AAB (App Bundle)
-        run: flutter build appbundle --release --obfuscate --split-debug-info=build/debug-info-aab
-
-      - name: Read version from pubspec
+      - name: Read version name from pubspec
         id: version
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APK (split per ABI + shrink)
+        run: |
+          flutter build apk --release --split-per-abi --obfuscate \
+            --split-debug-info=build/debug-info \
+            --build-name=${{ steps.version.outputs.version }} \
+            --build-number=${{ github.run_number }}
+
+      - name: Build release AAB (App Bundle)
+        run: |
+          flutter build appbundle --release --obfuscate \
+            --split-debug-info=build/debug-info-aab \
+            --build-name=${{ steps.version.outputs.version }} \
+            --build-number=${{ github.run_number }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
