@@ -43,6 +43,9 @@ jobs:
       - name: Build release APK (split per ABI + shrink)
         run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/debug-info
 
+      - name: Build release AAB (App Bundle)
+        run: flutter build appbundle --release --obfuscate --split-debug-info=build/debug-info-aab
+
       - name: Read version from pubspec
         id: version
         run: |
@@ -57,5 +60,6 @@ jobs:
           files: |
             build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/bundle/release/app-release.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
