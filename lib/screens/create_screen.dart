@@ -616,7 +616,6 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
