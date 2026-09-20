@@ -40,8 +40,8 @@ jobs:
           storeFile=release.keystore
           PROPS
 
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Build release APK (split per ABI + shrink)
+        run: flutter build apk --release --split-per-abi --obfuscate --split-debug-info=build/debug-info
 
       - name: Read version from pubspec
         id: version
@@ -54,6 +54,8 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}-${{ github.run_number }}
           name: topsheet v${{ steps.version.outputs.version }} (build ${{ github.run_number }})
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
