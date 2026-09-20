@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -616,33 +617,30 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Create Topsheet'),
-            Text(
-              'Generate clean, share-ready practical sheets',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                letterSpacing: 0.08,
-              ),
-            ),
-          ],
-        ),
-
-      ),
+      extendBodyBehindAppBar: true,
       body: Stack(
         children: [
           const _AtmosphereBackground(),
           SafeArea(
             child: ListView(
               controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 74, 16, 48),
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),
               children: [
+                Text(
+                  'Create Topsheet',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Generate a clean, share-ready practical sheet',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
                 AnimatedSize(
                   duration: Motion.standard,
                   curve: Motion.standardCurve,
@@ -672,9 +670,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _Section(
                   title: 'Course',
+                  icon: Icons.menu_book_rounded,
                   children: [
                     _PickerField(
                       label: 'Department',
@@ -694,9 +693,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Experiment',
+                  icon: Icons.science_rounded,
                   children: [
                     _TextInput(
                       controller: _exptNoCtrl,
@@ -731,9 +731,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Student',
+                  icon: Icons.school_rounded,
                   children: [
                     RecallTextField(
                       field: 'studentName',
@@ -786,9 +787,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Teacher',
+                  icon: Icons.badge_rounded,
                   children: [
                     RecallTextField(
                       field: 'teacherName',
@@ -815,13 +817,70 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
               ],
             ),
           ),
+          // Floating header — blurred back button (left) + compact generate
+          // pill (right). Intentional blur exception: a small floating control
+          // over scrolling content, not a card/surface treatment.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _BlurIconButton(
+                      icon: Icons.arrow_back_rounded,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    _GenerateFab(
+                      state: _fabState,
+                      onPressed: _generatePdf,
+                      shakeSignal: _fabShakeSignal,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: _GenerateFab(
-        state: _fabState,
-        onPressed: _generatePdf,
-        shakeSignal: _fabShakeSignal,
+    );
+  }
+}
+
+/// Small circular button with a frosted-glass backdrop blur — floats over
+/// scrolling content. Used only for this one floating control, not for
+/// cards/surfaces (see design.md).
+class _BlurIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _BlurIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Pressable(
+          onTap: onTap,
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: scheme.surface.withValues(alpha: 0.55),
+              shape: BoxShape.circle,
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Icon(icon, size: 20, color: scheme.onSurface),
+          ),
+        ),
       ),
     );
   }
@@ -875,23 +934,31 @@ class _GenerateFabState extends State<_GenerateFab>
   @override
   Widget build(BuildContext context) {
     final tier = motionTierOf(context);
+    final scheme = Theme.of(context).colorScheme;
     final label = switch (widget.state) {
-      _FabState.idle => 'Generate & Share',
-      _FabState.generating => 'Generating…',
+      _FabState.idle => 'Generate',
+      _FabState.generating => 'Working…',
       _FabState.done => 'Saved',
     };
     final icon = switch (widget.state) {
       _FabState.idle => const Icon(
-        Icons.picture_as_pdf_outlined,
+        Icons.picture_as_pdf_rounded,
         key: ValueKey('idle'),
+        size: 17,
+        color: Colors.white,
       ),
       _FabState.generating => const SizedBox(
         key: ValueKey('spin'),
-        width: 18,
-        height: 18,
+        width: 15,
+        height: 15,
         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
       ),
-      _FabState.done => const Icon(Icons.check_rounded, key: ValueKey('done')),
+      _FabState.done => const Icon(
+        Icons.check_rounded,
+        key: ValueKey('done'),
+        size: 17,
+        color: Colors.white,
+      ),
     };
     return AnimatedBuilder(
       animation: _shakeController,
@@ -899,21 +966,50 @@ class _GenerateFabState extends State<_GenerateFab>
         offset: Offset(8 * _offsetFor(_shakeController.value), 0),
         child: child,
       ),
-      child: FloatingActionButton.extended(
-        heroTag: 'generate',
-        onPressed: widget.state == _FabState.idle ? widget.onPressed : null,
-        icon: AnimatedSwitcher(
-          duration: tier == MotionTier.reduced ? Motion.fast : Motion.standard,
-          reverseDuration: Motion.fast,
-          switchInCurve: Curves.easeOutBack,
-          switchOutCurve: Curves.easeOutCubic,
-          transitionBuilder: (child, anim) =>
-              ScaleTransition(scale: anim, child: child),
-          child: icon,
-        ),
-        label: AnimatedSwitcher(
-          duration: Motion.fast,
-          child: Text(label, key: ValueKey(label)),
+      child: Pressable(
+        onTap: widget.state == _FabState.idle ? widget.onPressed : null,
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSwitcher(
+                duration: tier == MotionTier.reduced
+                    ? Motion.fast
+                    : Motion.standard,
+                reverseDuration: Motion.fast,
+                switchInCurve: Curves.easeOutBack,
+                switchOutCurve: Curves.easeOutCubic,
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: icon,
+              ),
+              const SizedBox(width: 8),
+              AnimatedSwitcher(
+                duration: Motion.fast,
+                child: Text(
+                  label,
+                  key: ValueKey(label),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1005,9 +1101,10 @@ class _HintBanner extends StatelessWidget {
 /// per-section icon or accent color.
 class _Section extends StatelessWidget {
   final String title;
+  final IconData? icon;
   final List<Widget> children;
 
-  const _Section({required this.title, required this.children});
+  const _Section({required this.title, this.icon, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -1017,14 +1114,31 @@ class _Section extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8, left: 2),
-          child: Text(
-            title.toUpperCase(),
-            style: textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.9,
-            ),
+          padding: const EdgeInsets.only(bottom: 10, left: 2),
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 15, color: scheme.primary),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                title.toUpperCase(),
+                style: textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.9,
+                ),
+              ),
+            ],
           ),
         ),
         Container(

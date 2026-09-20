@@ -1,19 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Dark-premium splash: app icon centered-high, Thekami logo small below it -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/splash_bg" />
-    <item android:bottom="120dp">
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/ic_launcher" />
+    <item android:bottom="150dp">
+        <bitmap android:gravity="center" android:src="@mipmap/ic_launcher" />
     </item>
     <item
-        android:width="120dp"
-        android:height="36dp"
+        android:width="180dp"
+        android:height="54dp"
         android:gravity="bottom|center_horizontal"
-        android:bottom="80dp">
-        <bitmap
-            android:gravity="fill"
-            android:src="@drawable/thekami_logo" />
+        android:bottom="70dp">
+        <bitmap android:gravity="fill" android:src="@drawable/thekami_logo" />
     </item>
 </layer-list>

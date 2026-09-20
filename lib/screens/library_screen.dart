@@ -242,7 +242,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: _searching ? 4 : null,
+        toolbarHeight: 68,
+        titleSpacing: _searching ? 4 : 20,
         title: AnimatedSwitcher(
           duration: const Duration(milliseconds: 180),
           child: _searching
@@ -285,7 +286,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     onChanged: (v) => setState(() => _query = v),
                   ),
                 )
-              : const Text('Topsheet', key: ValueKey('title')),
+              : Text(
+                  'Topsheet',
+                  key: const ValueKey('title'),
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
         ),
         actions: [
           Pressable(
