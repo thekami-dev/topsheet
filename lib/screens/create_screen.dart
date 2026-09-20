@@ -18,7 +18,6 @@ import '../pdf/topsheet_pdf.dart';
 import '../widgets/pressable.dart';
 import '../widgets/recall_text_field.dart';
 import '../widgets/searchable_picker.dart';
-import 'settings_screen.dart';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench
  * design-system: design.md · designed-as-app
@@ -49,7 +48,6 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   final _teacherRoleCtrl = TextEditingController();
   final _teacherDeptCtrl = TextEditingController();
 
-  final _settingsButtonKey = GlobalKey();
   final _scrollController = ScrollController();
 
   _FabState _fabState = _FabState.idle;
@@ -598,13 +596,6 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     });
   }
 
-  void _openSettings() {
-    final tier = motionTierOf(context);
-    Navigator.of(
-      context,
-    ).push(_SettingsRoute(reduced: tier == MotionTier.reduced));
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -630,7 +621,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Topsheet'),
+            const Text('Create Topsheet'),
             Text(
               'Generate clean, share-ready practical sheets',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -640,27 +631,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
             ),
           ],
         ),
-        actions: [
-          Pressable(
-            key: _settingsButtonKey,
-            onTap: _openSettings,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: scheme.outlineVariant),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Icon(Icons.tune_rounded),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
+
       ),
       body: Stack(
         children: [
@@ -950,35 +921,6 @@ class _GenerateFabState extends State<_GenerateFab>
   }
 }
 
-/// Settings push that slides in from — and dismisses back toward — the
-/// settings button's own position, so entry/exit share one path.
-class _SettingsRoute extends PageRouteBuilder<void> {
-  _SettingsRoute({required bool reduced})
-    : super(
-        transitionDuration: reduced ? Motion.fast : Motion.standard,
-        reverseTransitionDuration: Motion.fast,
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const SettingsScreen(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (reduced) {
-            return FadeTransition(opacity: animation, child: child);
-          }
-          final curved = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeOutCubic,
-          );
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
-          );
-        },
-      );
-}
-
 class _HintBanner extends StatelessWidget {
   final VoidCallback onDismiss;
   const _HintBanner({required this.onDismiss});
@@ -988,16 +930,9 @@ class _HintBanner extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.85),
-            scheme.tertiaryContainer.withValues(alpha: 0.75),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 10, 13),
@@ -1032,7 +967,7 @@ class _HintBanner extends StatelessWidget {
                 child: Text.rich(
                   TextSpan(
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onPrimaryContainer,
+                      color: scheme.onSurface,
                       height: 1.3,
                     ),
                     children: const [
@@ -1055,7 +990,7 @@ class _HintBanner extends StatelessWidget {
                 child: Icon(
                   Icons.close_rounded,
                   size: 18,
-                  color: scheme.onPrimaryContainer.withValues(alpha: 0.7),
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
             ),
