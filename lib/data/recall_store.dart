@@ -160,6 +160,17 @@ class RecallStore {
     return dropped;
   }
 
+  /// Theme preference: 'system' | 'light' | 'dark'
+  Future<String> themeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('themeMode') ?? 'system';
+  }
+
+  Future<void> setThemeMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('themeMode', mode);
+  }
+
   Future<void> removeRecentPdf(String path) async {
     final prefs = await SharedPreferences.getInstance();
     final list = await recentPdfs();

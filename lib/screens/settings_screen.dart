@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/recall_store.dart';
+import '../main.dart' show applyThemeMode, themeModeNotifier;
 import '../widgets/pressable.dart';
 
 /* Hallmark · genre: dark-premium · macrostructure: Long Document
@@ -164,6 +166,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
           _SettingsGroup(
+            title: 'Appearance',
+            children: [
+              ValueListenableBuilder<ThemeMode>(
+                valueListenable: themeModeNotifier,
+                builder: (context, mode, _) {
+                  final current = switch (mode) {
+                    ThemeMode.light => 'light',
+                    ThemeMode.dark => 'dark',
+                    ThemeMode.system => 'system',
+                  };
+                  return Column(
+                    children: [
+                      _ThemeOptionTile(
+                        label: 'System default',
+                        icon: Icons.brightness_auto_rounded,
+                        selected: current == 'system',
+                        onTap: () => applyThemeMode('system'),
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                      _ThemeOptionTile(
+                        label: 'Light',
+                        icon: Icons.light_mode_outlined,
+                        selected: current == 'light',
+                        onTap: () => applyThemeMode('light'),
+                      ),
+                      Divider(
+                        height: 1,
+                        indent: 16,
+                        endIndent: 16,
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                      _ThemeOptionTile(
+                        label: 'Dark',
+                        icon: Icons.dark_mode_outlined,
+                        selected: current == 'dark',
+                        onTap: () => applyThemeMode('dark'),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsGroup(
             title: 'About',
             children: [
               _SettingsTile(
@@ -179,23 +231,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Community',
             children: [
               _SettingsTile(
-                icon: Icons.discord,
+                icon: FontAwesomeIcons.discord,
                 title: 'Discord',
                 subtitle: 'Join the Thekami community',
                 onTap: () => _launch(_kDiscord),
               ),
               _SettingsTile(
-                icon: Icons.business_center_outlined,
+                icon: FontAwesomeIcons.linkedinIn,
                 title: 'LinkedIn',
                 onTap: () => _launch(_kLinkedIn),
               ),
               _SettingsTile(
-                icon: Icons.camera_alt_outlined,
+                icon: FontAwesomeIcons.instagram,
                 title: 'Instagram',
                 onTap: () => _launch(_kInstagram),
               ),
               _SettingsTile(
-                icon: Icons.facebook_outlined,
+                icon: FontAwesomeIcons.facebook,
                 title: 'Facebook',
                 onTap: () => _launch(_kFacebook),
               ),
@@ -206,13 +258,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Open Source',
             children: [
               _SettingsTile(
-                icon: Icons.code_rounded,
+                icon: FontAwesomeIcons.github,
                 title: 'View source on GitHub',
                 subtitle: 'Topsheet is free and open source',
                 onTap: () => _launch(_kGithubRepo),
               ),
               _SettingsTile(
-                icon: Icons.corporate_fare_rounded,
+                icon: FontAwesomeIcons.github,
                 title: 'Thekami on GitHub',
                 onTap: () => _launch(_kGithubOrg),
               ),
@@ -354,6 +406,54 @@ class _SettingsTile extends StatelessWidget {
               size: 20,
               color: scheme.onSurfaceVariant,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _ThemeOptionTile extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ThemeOptionTile({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check_circle_rounded, size: 20, color: scheme.primary)
+            else
+              Icon(
+                Icons.circle_outlined,
+                size: 20,
+                color: scheme.onSurfaceVariant,
+              ),
           ],
         ),
       ),

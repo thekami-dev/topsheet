@@ -242,17 +242,51 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: _searching
-            ? TextField(
-                controller: _searchCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search topsheets…',
-                  border: InputBorder.none,
-                ),
-                onChanged: (v) => setState(() => _query = v),
-              )
-            : const Text('Topsheet'),
+        titleSpacing: _searching ? 4 : null,
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: _searching
+              ? Container(
+                  key: const ValueKey('search-field'),
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    autofocus: true,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Search topsheets…',
+                      border: InputBorder.none,
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        size: 20,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      suffixIcon: _query.isNotEmpty
+                          ? Pressable(
+                              onTap: () {
+                                _searchCtrl.clear();
+                                setState(() => _query = '');
+                              },
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 18,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            )
+                          : null,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                )
+              : const Text('Topsheet', key: ValueKey('title')),
+        ),
         actions: [
           Pressable(
             onTap: () => setState(() {
