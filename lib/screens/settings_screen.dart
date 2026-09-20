@@ -11,14 +11,14 @@ import '../widgets/pressable.dart';
  * design-system: design.md · designed-as-app
  */
 
-const _kGithubRepo = 'https://github.com/thekami-dev/topsheet'\;
-const _kGithubOrg = 'https://github.com/thekami-dev'\;
-const _kDiscord = 'https://www.thekami.tech/discord/'\;
-const _kLinkedIn = 'https://www.linkedin.com/company/thekamiofficial'\;
-const _kInstagram = 'https://www.instagram.com/thekami_official'\;
-const _kFacebook = 'https://www.facebook.com/thekamidev/'\;
-const _kSupport = 'https://www.supportkori.com/thekami'\;
-const _kThekamiSite = 'https://www.thekami.tech'\;
+const _kGithubRepo = 'https://github.com/thekami-dev/topsheet';
+const _kGithubOrg = 'https://github.com/thekami-dev';
+const _kDiscord = 'https://www.thekami.tech/discord/';
+const _kLinkedIn = 'https://www.linkedin.com/company/thekamiofficial';
+const _kInstagram = 'https://www.instagram.com/thekami_official';
+const _kFacebook = 'https://www.facebook.com/thekamidev/';
+const _kSupport = 'https://www.supportkori.com/thekami';
+const _kThekamiSite = 'https://www.thekami.tech';
 const _kThekamiLogo = 'assets/images/thekami_logo.png';
 
 class SettingsScreen extends StatefulWidget {
