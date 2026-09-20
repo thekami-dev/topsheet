@@ -11,14 +11,14 @@ import '../widgets/pressable.dart';
  * design-system: design.md · designed-as-app
  */
 
-const _kGithubRepo = 'https://github.com/thekami-dev/topsheet';
-const _kGithubOrg = 'https://github.com/thekami-dev';
-const _kDiscord = 'https://www.thekami.tech/discord/';
-const _kLinkedIn = 'https://www.linkedin.com/company/thekamiofficial';
-const _kInstagram = 'https://www.instagram.com/thekami_official';
-const _kFacebook = 'https://www.facebook.com/thekamidev/';
-const _kSupport = 'https://www.supportkori.com/thekami';
-const _kThekamiSite = 'https://www.thekami.tech';
+const _kGithubRepo = 'https://github.com/thekami-dev/topsheet'\;
+const _kGithubOrg = 'https://github.com/thekami-dev'\;
+const _kDiscord = 'https://www.thekami.tech/discord/'\;
+const _kLinkedIn = 'https://www.linkedin.com/company/thekamiofficial'\;
+const _kInstagram = 'https://www.instagram.com/thekami_official'\;
+const _kFacebook = 'https://www.facebook.com/thekamidev/'\;
+const _kSupport = 'https://www.supportkori.com/thekami'\;
+const _kThekamiSite = 'https://www.thekami.tech'\;
 const _kThekamiLogo = 'assets/images/thekami_logo.png';
 
 class SettingsScreen extends StatefulWidget {
@@ -147,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'General',
             children: [
               _SettingsTile(
-                icon: Icons.history_toggle_off_outlined,
+                icon: const Icon(Icons.history_toggle_off_outlined, size: 20),
                 title: 'Clear remembered values',
                 subtitle:
                     'Forgets saved teacher, student, and batch suggestions',
@@ -188,7 +188,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         height: 1,
                         indent: 16,
                         endIndent: 16,
-                        color: Theme.of(context).colorScheme.outlineVariant,
+                        color: scheme.outlineVariant,
                       ),
                       _ThemeOptionTile(
                         label: 'Light',
@@ -200,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         height: 1,
                         indent: 16,
                         endIndent: 16,
-                        color: Theme.of(context).colorScheme.outlineVariant,
+                        color: scheme.outlineVariant,
                       ),
                       _ThemeOptionTile(
                         label: 'Dark',
@@ -219,7 +219,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'About',
             children: [
               _SettingsTile(
-                icon: Icons.info_outline_rounded,
+                icon: const Icon(Icons.info_outline_rounded, size: 20),
                 title: 'About Topsheet',
                 subtitle: 'Version, usage, and app details',
                 onTap: _showAbout,
@@ -231,23 +231,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Community',
             children: [
               _SettingsTile(
-                icon: FontAwesomeIcons.discord,
+                icon: FaIcon(
+                  FontAwesomeIcons.discord,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
                 title: 'Discord',
                 subtitle: 'Join the Thekami community',
                 onTap: () => _launch(_kDiscord),
               ),
               _SettingsTile(
-                icon: FontAwesomeIcons.linkedinIn,
+                icon: FaIcon(
+                  FontAwesomeIcons.linkedinIn,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
                 title: 'LinkedIn',
                 onTap: () => _launch(_kLinkedIn),
               ),
               _SettingsTile(
-                icon: FontAwesomeIcons.instagram,
+                icon: FaIcon(
+                  FontAwesomeIcons.instagram,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
                 title: 'Instagram',
                 onTap: () => _launch(_kInstagram),
               ),
               _SettingsTile(
-                icon: FontAwesomeIcons.facebook,
+                icon: FaIcon(
+                  FontAwesomeIcons.facebook,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
                 title: 'Facebook',
                 onTap: () => _launch(_kFacebook),
               ),
@@ -258,13 +274,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Open Source',
             children: [
               _SettingsTile(
-                icon: FontAwesomeIcons.github,
+                icon: FaIcon(
+                  FontAwesomeIcons.github,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
                 title: 'View source on GitHub',
                 subtitle: 'Topsheet is free and open source',
                 onTap: () => _launch(_kGithubRepo),
               ),
               _SettingsTile(
-                icon: FontAwesomeIcons.github,
+                icon: FaIcon(
+                  FontAwesomeIcons.github,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
                 title: 'Thekami on GitHub',
                 onTap: () => _launch(_kGithubOrg),
               ),
@@ -275,7 +299,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'Support',
             children: [
               _SettingsTile(
-                icon: Icons.favorite_outline_rounded,
+                icon: const Icon(Icons.favorite_outline_rounded, size: 20),
                 title: 'Support this project',
                 subtitle: 'Help keep Thekami\'s apps free',
                 onTap: () => _launch(_kSupport),
@@ -357,8 +381,10 @@ class _SettingsGroup extends StatelessWidget {
   }
 }
 
+/// icon accepts a pre-built Widget (Icon or FaIcon) so this tile works with
+/// both Material icons and Font Awesome brand icons.
 class _SettingsTile extends StatelessWidget {
-  final IconData icon;
+  final Widget icon;
   final String title;
   final String? subtitle;
   final VoidCallback onTap;
@@ -379,7 +405,7 @@ class _SettingsTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+            SizedBox(width: 20, child: Center(child: icon)),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -412,7 +438,6 @@ class _SettingsTile extends StatelessWidget {
     );
   }
 }
-
 
 class _ThemeOptionTile extends StatelessWidget {
   final String label;
