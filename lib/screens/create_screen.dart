@@ -124,7 +124,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     if (dept != null) {
       final subjectCode = draft['subjectCode'] as int?;
       if (subjectCode != null) {
-        final subjects = await AppDatabase.instance.subjectsForDept(dept.code);
+        final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(dept.code);
         for (final s in subjects) {
           if (s.code == subjectCode) {
             subject = s;
@@ -162,7 +162,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     final (deptCode, subjectCode, semester) = last;
     final dept = departmentByCode(deptCode);
     if (dept == null) return;
-    final subjects = await AppDatabase.instance.subjectsForDept(deptCode);
+    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(deptCode);
     Subject? subject;
     for (final s in subjects) {
       if (s.code == subjectCode) {
