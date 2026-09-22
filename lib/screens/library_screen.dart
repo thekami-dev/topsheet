@@ -245,45 +245,69 @@ class _LibraryScreenState extends State<LibraryScreen> {
         toolbarHeight: 68,
         titleSpacing: _searching ? 4 : 20,
         title: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.94, end: 1.0).animate(animation),
+              child: child,
+            ),
+          ),
           child: _searching
               ? Container(
                   key: const ValueKey('search-field'),
-                  height: 42,
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: scheme.outlineVariant),
                   ),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    autofocus: true,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: 'Search topsheets…',
-                      border: InputBorder.none,
-                      prefixIcon: Icon(
+                  child: Row(
+                    children: [
+                      Icon(
                         Icons.search_rounded,
-                        size: 20,
+                        size: 19,
                         color: scheme.onSurfaceVariant,
                       ),
-                      suffixIcon: _query.isNotEmpty
-                          ? Pressable(
-                              onTap: () {
-                                _searchCtrl.clear();
-                                setState(() => _query = '');
-                              },
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 18,
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            )
-                          : null,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    onChanged: (v) => setState(() => _query = v),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          autofocus: true,
+                          cursorColor: scheme.primary,
+                          cursorWidth: 1.6,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            isCollapsed: true,
+                            hintText: 'Search topsheets…',
+                            hintStyle: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                          ),
+                          onChanged: (v) => setState(() => _query = v),
+                        ),
+                      ),
+                      if (_query.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Pressable(
+                          onTap: () {
+                            _searchCtrl.clear();
+                            setState(() => _query = '');
+                          },
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 17,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 )
               : Text(
@@ -372,9 +396,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ],
               ],
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreate,
-        child: const Icon(Icons.add_rounded),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: scheme.primary.withValues(alpha: 0.45),
+              blurRadius: 16,
+              spreadRadius: 1,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: _openCreate,
+          elevation: 0,
+          highlightElevation: 0,
+          child: const Icon(Icons.add_rounded),
+        ),
       ),
     );
   }
