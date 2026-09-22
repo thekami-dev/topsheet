@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,7 +19,6 @@ import '../pdf/topsheet_pdf.dart';
 import '../widgets/pressable.dart';
 import '../widgets/recall_text_field.dart';
 import '../widgets/searchable_picker.dart';
-import 'settings_screen.dart';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench
  * design-system: design.md · designed-as-app
@@ -26,14 +26,16 @@ import 'settings_screen.dart';
 
 enum _FabState { idle, generating, done }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class CreateScreen extends StatefulWidget {
+  final Map<String, dynamic>? initialData;
+
+  const CreateScreen({super.key, this.initialData});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<CreateScreen> createState() => _CreateScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver {
   final _data = TopsheetData();
   final _df = DateFormat('dd MMM yyyy');
 
@@ -47,7 +49,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _teacherRoleCtrl = TextEditingController();
   final _teacherDeptCtrl = TextEditingController();
 
-  final _settingsButtonKey = GlobalKey();
   final _scrollController = ScrollController();
 
   _FabState _fabState = _FabState.idle;
@@ -60,7 +61,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _restoreLastPicks().whenComplete(_restoreDraft);
+    if (widget.initialData != null) {
+      _restoreFrom(widget.initialData!);
+    } else {
+      _restoreLastPicks().whenComplete(_restoreDraft);
+    }
     RecallStore.instance.hintSeen().then((seen) {
       if (mounted && !seen) setState(() => _showHint = true);
     });
@@ -106,7 +111,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _restoreDraft() async {
     final draft = await RecallStore.instance.loadDraft();
     if (draft == null) return;
+    await _restoreFrom(draft);
+  }
 
+  /// Populates the form from a saved draft OR a recent topsheet's stored
+  /// formData (edit flow) — same shape, same restore logic either way.
+  Future<void> _restoreFrom(Map<String, dynamic> draft) async {
     Department? dept;
     final deptCode = draft['deptCode'] as int?;
     if (deptCode != null) dept = departmentByCode(deptCode);
@@ -310,7 +320,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final displayName = _data.exptName.isEmpty
           ? (_data.subject?.name ?? 'Topsheet')
           : '${_data.exptName} — ${_data.subject?.name ?? ''}';
-      await _saveToRecents(bytes, displayName.trim());
+      await _saveToRecents(bytes, displayName.trim(), _draftJson());
       await RecallStore.instance.clearDraft();
 
       // Clear per-experiment fields only — teacher/student/dept/batch carry
@@ -337,7 +347,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _saveToRecents(Uint8List bytes, String name) async {
+  Future<void> _saveToRecents(
+    Uint8List bytes,
+    String name,
+    Map<String, dynamic> formData,
+  ) async {
     final dir = await getApplicationDocumentsDirectory();
     final topsheetsDir = Directory(p.join(dir.path, 'topsheets'));
     if (!await topsheetsDir.exists())
@@ -352,6 +366,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final dropped = await RecallStore.instance.addRecentPdf(
       path: file.path,
       name: name,
+      formData: formData,
     );
     for (final path in dropped) {
       final f = File(path);
@@ -404,7 +419,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(20),
                 child: ColoredBox(
-                  color: scheme.primaryContainer.withValues(alpha: 0.65),
+                  color: scheme.primaryContainer,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     child: Row(
@@ -448,11 +463,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 decoration: BoxDecoration(
                                   color: scheme.primaryContainer,
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: scheme.primary.withValues(
-                                      alpha: 0.35,
-                                    ),
-                                  ),
+                                  border: Border.all(color: scheme.primary),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
@@ -586,13 +597,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
-  void _openSettings() {
-    final tier = motionTierOf(context);
-    Navigator.of(
-      context,
-    ).push(_SettingsRoute(reduced: tier == MotionTier.reduced));
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -613,56 +617,30 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Topsheet'),
-            Text(
-              'Generate clean, share-ready practical sheets',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                letterSpacing: 0.08,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          Pressable(
-            key: _settingsButtonKey,
-            onTap: _openSettings,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(8),
-                  child: Icon(Icons.tune_rounded),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      extendBodyBehindAppBar: true,
       body: Stack(
         children: [
           const _AtmosphereBackground(),
           SafeArea(
             child: ListView(
               controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              padding: const EdgeInsets.fromLTRB(16, 74, 16, 48),
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),
               children: [
+                Text(
+                  'Create Topsheet',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Generate a clean, share-ready practical sheet',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
                 AnimatedSize(
                   duration: Motion.standard,
                   curve: Motion.standardCurve,
@@ -692,9 +670,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _Section(
                   title: 'Course',
+                  icon: Icons.menu_book_rounded,
                   children: [
                     _PickerField(
                       label: 'Department',
@@ -714,9 +693,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Experiment',
+                  icon: Icons.science_rounded,
                   children: [
                     _TextInput(
                       controller: _exptNoCtrl,
@@ -751,9 +731,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Student',
+                  icon: Icons.school_rounded,
                   children: [
                     RecallTextField(
                       field: 'studentName',
@@ -806,9 +787,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Teacher',
+                  icon: Icons.badge_rounded,
                   children: [
                     RecallTextField(
                       field: 'teacherName',
@@ -835,13 +817,70 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ],
             ),
           ),
+          // Floating header — blurred back button (left) + compact generate
+          // pill (right). Intentional blur exception: a small floating control
+          // over scrolling content, not a card/surface treatment.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _BlurIconButton(
+                      icon: Icons.arrow_back_rounded,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    _GenerateFab(
+                      state: _fabState,
+                      onPressed: _generatePdf,
+                      shakeSignal: _fabShakeSignal,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: _GenerateFab(
-        state: _fabState,
-        onPressed: _generatePdf,
-        shakeSignal: _fabShakeSignal,
+    );
+  }
+}
+
+/// Small circular button with a frosted-glass backdrop blur — floats over
+/// scrolling content. Used only for this one floating control, not for
+/// cards/surfaces (see design.md).
+class _BlurIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _BlurIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Pressable(
+          onTap: onTap,
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: scheme.surface.withValues(alpha: 0.55),
+              shape: BoxShape.circle,
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Icon(icon, size: 20, color: scheme.onSurface),
+          ),
+        ),
       ),
     );
   }
@@ -895,23 +934,31 @@ class _GenerateFabState extends State<_GenerateFab>
   @override
   Widget build(BuildContext context) {
     final tier = motionTierOf(context);
+    final scheme = Theme.of(context).colorScheme;
     final label = switch (widget.state) {
-      _FabState.idle => 'Generate & Share',
-      _FabState.generating => 'Generating…',
+      _FabState.idle => 'Generate',
+      _FabState.generating => 'Working…',
       _FabState.done => 'Saved',
     };
     final icon = switch (widget.state) {
       _FabState.idle => const Icon(
-        Icons.picture_as_pdf_outlined,
+        Icons.picture_as_pdf_rounded,
         key: ValueKey('idle'),
+        size: 17,
+        color: Colors.white,
       ),
       _FabState.generating => const SizedBox(
         key: ValueKey('spin'),
-        width: 18,
-        height: 18,
+        width: 15,
+        height: 15,
         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
       ),
-      _FabState.done => const Icon(Icons.check_rounded, key: ValueKey('done')),
+      _FabState.done => const Icon(
+        Icons.check_rounded,
+        key: ValueKey('done'),
+        size: 17,
+        color: Colors.white,
+      ),
     };
     return AnimatedBuilder(
       animation: _shakeController,
@@ -919,54 +966,54 @@ class _GenerateFabState extends State<_GenerateFab>
         offset: Offset(8 * _offsetFor(_shakeController.value), 0),
         child: child,
       ),
-      child: FloatingActionButton.extended(
-        heroTag: 'generate',
-        onPressed: widget.state == _FabState.idle ? widget.onPressed : null,
-        icon: AnimatedSwitcher(
-          duration: tier == MotionTier.reduced ? Motion.fast : Motion.standard,
-          reverseDuration: Motion.fast,
-          switchInCurve: Curves.easeOutBack,
-          switchOutCurve: Curves.easeOutCubic,
-          transitionBuilder: (child, anim) =>
-              ScaleTransition(scale: anim, child: child),
-          child: icon,
-        ),
-        label: AnimatedSwitcher(
-          duration: Motion.fast,
-          child: Text(label, key: ValueKey(label)),
+      child: Pressable(
+        onTap: widget.state == _FabState.idle ? widget.onPressed : null,
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSwitcher(
+                duration: tier == MotionTier.reduced
+                    ? Motion.fast
+                    : Motion.standard,
+                reverseDuration: Motion.fast,
+                switchInCurve: Curves.easeOutBack,
+                switchOutCurve: Curves.easeOutCubic,
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: icon,
+              ),
+              const SizedBox(width: 8),
+              AnimatedSwitcher(
+                duration: Motion.fast,
+                child: Text(
+                  label,
+                  key: ValueKey(label),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
-}
-
-/// Settings push that slides in from — and dismisses back toward — the
-/// settings button's own position, so entry/exit share one path.
-class _SettingsRoute extends PageRouteBuilder<void> {
-  _SettingsRoute({required bool reduced})
-    : super(
-        transitionDuration: reduced ? Motion.fast : Motion.standard,
-        reverseTransitionDuration: Motion.fast,
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const SettingsScreen(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          if (reduced) {
-            return FadeTransition(opacity: animation, child: child);
-          }
-          final curved = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-            reverseCurve: Curves.easeOutCubic,
-          );
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(1, 0),
-              end: Offset.zero,
-            ).animate(curved),
-            child: FadeTransition(opacity: curved, child: child),
-          );
-        },
-      );
 }
 
 class _HintBanner extends StatelessWidget {
@@ -978,16 +1025,9 @@ class _HintBanner extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            scheme.primaryContainer.withValues(alpha: 0.85),
-            scheme.tertiaryContainer.withValues(alpha: 0.75),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.18)),
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 10, 13),
@@ -1022,7 +1062,7 @@ class _HintBanner extends StatelessWidget {
                 child: Text.rich(
                   TextSpan(
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onPrimaryContainer,
+                      color: scheme.onSurface,
                       height: 1.3,
                     ),
                     children: const [
@@ -1045,7 +1085,7 @@ class _HintBanner extends StatelessWidget {
                 child: Icon(
                   Icons.close_rounded,
                   size: 18,
-                  color: scheme.onPrimaryContainer.withValues(alpha: 0.7),
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -1061,9 +1101,10 @@ class _HintBanner extends StatelessWidget {
 /// per-section icon or accent color.
 class _Section extends StatelessWidget {
   final String title;
+  final IconData? icon;
   final List<Widget> children;
 
-  const _Section({required this.title, required this.children});
+  const _Section({required this.title, this.icon, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -1073,32 +1114,40 @@ class _Section extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8, left: 2),
-          child: Text(
-            title.toUpperCase(),
-            style: textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.92),
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.9,
-            ),
+          padding: const EdgeInsets.only(bottom: 10, left: 2),
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 15, color: scheme.primary),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                title.toUpperCase(),
+                style: textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.9,
+                ),
+              ),
+            ],
           ),
         ),
         Container(
           padding: const EdgeInsets.all(12),
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: scheme.surface.withValues(alpha: 0.74),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: scheme.outlineVariant.withValues(alpha: 0.36),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.shadow.withValues(alpha: 0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: scheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1173,9 +1222,7 @@ class _PickerField extends StatelessWidget {
               height: 24,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
@@ -1192,59 +1239,11 @@ class _AtmosphereBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    // Dark-premium: flat solid background, no gradient/blur orbs.
     return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            scheme.surface,
-            scheme.surfaceContainerLow.withValues(alpha: 0.9),
-          ],
-        ),
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            top: -110,
-            right: -70,
-            child: _BlurOrb(
-              color: scheme.primary.withValues(alpha: 0.16),
-              size: 260,
-            ),
-          ),
-          Positioned(
-            bottom: -130,
-            left: -100,
-            child: _BlurOrb(
-              color: scheme.tertiary.withValues(alpha: 0.13),
-              size: 290,
-            ),
-          ),
-        ],
-      ),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface),
     );
   }
-}
-
-class _BlurOrb extends StatelessWidget {
-  final Color color;
-  final double size;
-
-  const _BlurOrb({required this.color, required this.size});
-
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [color, color.withValues(alpha: 0)]),
-      ),
-    ),
-  );
 }
 
 class _StatusEntry {
@@ -1266,11 +1265,9 @@ class _StatusBoard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: scheme.outlineVariant.withValues(alpha: 0.34),
-        ),
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -1309,7 +1306,7 @@ class _StatusBoard extends StatelessWidget {
                 width: 1,
                 height: 30,
                 margin: const EdgeInsets.symmetric(horizontal: 10),
-                color: scheme.outlineVariant.withValues(alpha: 0.45),
+                color: scheme.outlineVariant,
               ),
           ],
         ],

@@ -75,16 +75,14 @@ class _RecallTextFieldState extends State<RecallTextField> {
               constraints: const BoxConstraints(maxHeight: 220, maxWidth: 340),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: scheme.surface.withValues(alpha: 0.94),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.35),
-                  ),
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: scheme.outlineVariant),
                   boxShadow: [
                     BoxShadow(
-                      color: scheme.shadow.withValues(alpha: 0.14),
-                      blurRadius: 18,
-                      offset: const Offset(0, 10),
+                      color: Colors.black.withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                 ),

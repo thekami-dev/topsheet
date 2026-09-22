@@ -76,11 +76,9 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
             child: Container(
               padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
               decoration: BoxDecoration(
-                color: scheme.surfaceContainerHigh.withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: 0.35),
-                ),
+                color: scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: scheme.outlineVariant),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,13 +148,9 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
                             onTap: () => _select(item),
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: scheme.surface.withValues(alpha: 0.78),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: scheme.outlineVariant.withValues(
-                                    alpha: 0.28,
-                                  ),
-                                ),
+                                color: scheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: scheme.outlineVariant),
                               ),
                               child: ListTile(
                                 title: Text(widget.labelOf(item)),
