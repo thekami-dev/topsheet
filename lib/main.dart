@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'data/recall_store.dart';
 import 'screens/library_screen.dart';
@@ -92,9 +91,9 @@ ThemeData _buildTheme({required bool isDark}) {
         onInverseSurface: text,
       );
 
-  final baseTextTheme = GoogleFonts.interTextTheme(
-    isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
-  ).apply(bodyColor: text, displayColor: text);
+  final baseTextTheme =
+      (isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme)
+          .apply(fontFamily: 'Inter', bodyColor: text, displayColor: text);
 
   final textTheme = baseTextTheme.copyWith(
     displaySmall: baseTextTheme.displaySmall?.copyWith(
