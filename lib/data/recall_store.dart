@@ -202,6 +202,13 @@ class RecallStore {
     };
   }
 
+  /// Marks onboarding as done without saving any profile fields — used
+  /// when the user taps "Skip for now".
+  Future<void> skipOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboardingComplete', true);
+  }
+
   /// Theme preference: 'system' | 'light' | 'dark'
   Future<String> themeMode() async {
     final prefs = await SharedPreferences.getInstance();
