@@ -3,7 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'install_source_service.dart';
 
-const _kGithubRepo = 'https://github.com/thekami-dev/topsheet'\;
+const _kGithubRepo = 'https://github.com/thekami-dev/topsheet';
 
 /// Shows the right ask depending on where the app came from: a native
 /// Play Store rating prompt for Play installs, or a GitHub star request
