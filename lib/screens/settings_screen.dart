@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/recall_store.dart';
 import '../main.dart' show applyThemeMode, themeModeNotifier;
 import '../widgets/pressable.dart';
+import 'edit_profile_screen.dart';
 
 /* Hallmark · genre: dark-premium · macrostructure: Long Document
  * design-system: design.md · designed-as-app
@@ -143,6 +144,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
+          _SettingsGroup(
+            title: 'Profile',
+            children: [
+              _SettingsTile(
+                icon: const Icon(Icons.person_outline_rounded, size: 20),
+                title: 'Edit profile',
+                subtitle: 'Name, index, institute, department, semester',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           _SettingsGroup(
             title: 'General',
             children: [

@@ -64,7 +64,9 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     if (widget.initialData != null) {
       _restoreFrom(widget.initialData!);
     } else {
-      _restoreLastPicks().whenComplete(_restoreDraft);
+      _restoreLastPicks().whenComplete(() {
+        _restoreDraft().whenComplete(_applyProfileDefaults);
+      });
     }
     RecallStore.instance.hintSeen().then((seen) {
       if (mounted && !seen) setState(() => _showHint = true);
@@ -175,6 +177,34 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       _data.department = dept;
       _data.subject = subject;
       _data.semester = semester;
+    });
+  }
+
+  /// Fills in the user's onboarding profile (name, index, semester,
+  /// department) as a fallback — but only for fields still empty after
+  /// last-picks/draft restore, so recent usage history always wins over
+  /// the onboarding-time default.
+  Future<void> _applyProfileDefaults() async {
+    final profile = await RecallStore.instance.loadProfile();
+    if (profile == null || !mounted) return;
+    setState(() {
+      if (_studentNameCtrl.text.trim().isEmpty) {
+        _studentNameCtrl.text = profile['name'] as String? ?? '';
+      }
+      if (_studentIndexCtrl.text.trim().isEmpty) {
+        _studentIndexCtrl.text = profile['studentIndex'] as String? ?? '';
+      }
+      if (_data.semester.isEmpty) {
+        final semester = profile['semester'] as String?;
+        if (semester != null && semester.isNotEmpty) _data.semester = semester;
+      }
+      if (_data.department == null) {
+        final deptCode = profile['deptCode'] as int?;
+        if (deptCode != null) {
+          final dept = departmentByCode(deptCode);
+          if (dept != null) _data.department = dept;
+        }
+      }
     });
   }
 
