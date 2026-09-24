@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data/departments.dart';
+import '../models/topsheet_data.dart' show semesters;
 import '../data/recall_store.dart';
 import '../models/institute.dart';
 import '../services/remote_data_service.dart';
