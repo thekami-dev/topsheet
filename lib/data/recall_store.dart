@@ -160,6 +160,55 @@ class RecallStore {
     return dropped;
   }
 
+  /// Onboarding: has the user completed the first-run setup flow?
+  Future<bool> onboardingComplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('onboardingComplete') ?? false;
+  }
+
+  /// Saves the user's profile from onboarding (or a later edit in
+  /// Settings). All fields are sticky defaults — used to prefill new
+  /// Topsheets, but always editable per-Topsheet afterward.
+  Future<void> saveProfile({
+    required String name,
+    required String studentIndex,
+    required String instituteId,
+    required String instituteName,
+    required int deptCode,
+    required String semester,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('profile_name', name);
+    await prefs.setString('profile_index', studentIndex);
+    await prefs.setString('profile_instituteId', instituteId);
+    await prefs.setString('profile_instituteName', instituteName);
+    await prefs.setInt('profile_deptCode', deptCode);
+    await prefs.setString('profile_semester', semester);
+    await prefs.setBool('onboardingComplete', true);
+  }
+
+  /// Returns the saved profile, or null if onboarding hasn't been
+  /// completed yet.
+  Future<Map<String, dynamic>?> loadProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!(prefs.getBool('onboardingComplete') ?? false)) return null;
+    return {
+      'name': prefs.getString('profile_name') ?? '',
+      'studentIndex': prefs.getString('profile_index') ?? '',
+      'instituteId': prefs.getString('profile_instituteId') ?? '',
+      'instituteName': prefs.getString('profile_instituteName') ?? '',
+      'deptCode': prefs.getInt('profile_deptCode'),
+      'semester': prefs.getString('profile_semester') ?? '',
+    };
+  }
+
+  /// Marks onboarding as done without saving any profile fields — used
+  /// when the user taps "Skip for now".
+  Future<void> skipOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboardingComplete', true);
+  }
+
   /// Theme preference: 'system' | 'light' | 'dark'
   Future<String> themeMode() async {
     final prefs = await SharedPreferences.getInstance();

@@ -5,7 +5,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/recall_store.dart';
 import '../main.dart' show applyThemeMode, themeModeNotifier;
+import '../services/install_source_service.dart';
+import '../services/rate_prompt_service.dart';
 import '../widgets/pressable.dart';
+import 'edit_profile_screen.dart';
 
 /* Hallmark · genre: dark-premium · macrostructure: Long Document
  * design-system: design.md · designed-as-app
@@ -30,12 +33,16 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   PackageInfo? _packageInfo;
+  bool? _isPlayStore;
 
   @override
   void initState() {
     super.initState();
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _packageInfo = info);
+    });
+    InstallSourceService.instance.isFromPlayStore().then((isPlayStore) {
+      if (mounted) setState(() => _isPlayStore = isPlayStore);
     });
   }
 
@@ -143,6 +150,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
+          _SettingsGroup(
+            title: 'Profile',
+            children: [
+              _SettingsTile(
+                icon: const Icon(Icons.person_outline_rounded, size: 20),
+                title: 'Edit profile',
+                subtitle: 'Name, index, institute, department, semester',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           _SettingsGroup(
             title: 'General',
             children: [
@@ -298,6 +321,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SettingsGroup(
             title: 'Support',
             children: [
+              _SettingsTile(
+                icon: Icon(
+                  _isPlayStore == false ? Icons.star_outline_rounded : Icons.star_rounded,
+                  size: 20,
+                ),
+                title: _isPlayStore == false ? 'Star on GitHub' : 'Rate Topsheet',
+                subtitle: _isPlayStore == false
+                    ? 'Give the project a star — it helps a lot'
+                    : 'Enjoying the app? Leave a rating',
+                onTap: () => RatePromptService.instance.requestRatingOrStar(),
+              ),
               _SettingsTile(
                 icon: const Icon(Icons.favorite_outline_rounded, size: 20),
                 title: 'Support this project',
