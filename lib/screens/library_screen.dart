@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -85,153 +86,165 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _showPreview(Uint8List bytes, String name) {
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => DraggableScrollableSheet(
-        initialChildSize: 0.92,
-        minChildSize: 0.6,
-        maxChildSize: 0.96,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: PdfPreview(
-                build: (format) async => bytes,
-                canChangeOrientation: false,
-                canChangePageFormat: false,
-                canDebug: false,
-                useActions: false,
-                scrollViewDecoration: const BoxDecoration(color: Colors.white),
-                pdfPreviewPageDecoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color.fromRGBO(0, 0, 0, 0.15),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                allowSharing: false,
-                allowPrinting: false,
-                pdfFileName: '\$name.pdf',
-              ),
-            ),
-          ],
+    return Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black54,
+        transitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (ctx, anim, secAnim) => FadeTransition(
+          opacity: anim,
+          child: _PdfPreviewPage(bytes: bytes, name: name),
         ),
       ),
     );
   }
 
-  Future<void> _showActions(Map<String, dynamic> entry) async {
+  Future<void> _showActions(Map<String, dynamic> entry, Offset tapPosition) async {
     final path = entry['path'] as String;
     final name = entry['name'] as String? ?? 'Topsheet';
     final scheme = Theme.of(context).colorScheme;
+    final screenSize = MediaQuery.of(context).size;
 
-    await showModalBottomSheet(
+    const menuWidth = 232.0;
+    const itemHeight = 46.0;
+    const headerHeight = 46.0;
+    const menuHeight = headerHeight + itemHeight * 5 + 12;
+
+    double left = tapPosition.dx - menuWidth + 24;
+    double top = tapPosition.dy - 12;
+    if (left < 16) left = 16;
+    if (left + menuWidth > screenSize.width - 16) {
+      left = screenSize.width - menuWidth - 16;
+    }
+    if (top + menuHeight > screenSize.height - 16) {
+      top = screenSize.height - menuHeight - 16;
+    }
+    if (top < 16) top = 16;
+
+    await showGeneralDialog(
       context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      barrierDismissible: true,
+      barrierLabel: 'menu',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (ctx, anim, secAnim) => const SizedBox.shrink(),
+      transitionBuilder: (ctx, anim, secAnim, child) {
+        return Stack(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+            Positioned.fill(
+              child: FadeTransition(
+                opacity: anim,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(ctx).pop(),
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(color: Colors.black.withValues(alpha: 0.18)),
                   ),
-                ],
+                ),
               ),
             ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.visibility_outlined),
-              title: const Text('Open'),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final bytes = await File(path).readAsBytes();
-                if (!mounted) return;
-                _showPreview(bytes, name);
-              },
+            Positioned(
+              left: left,
+              top: top,
+              child: ScaleTransition(
+                scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                alignment: Alignment.topRight,
+                child: FadeTransition(
+                  opacity: anim,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: menuWidth,
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: scheme.outlineVariant),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            blurRadius: 28,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(ctx).textTheme.labelLarge,
+                            ),
+                          ),
+                          Divider(height: 1, color: scheme.outlineVariant),
+                          _MenuAction(
+                            icon: Icons.visibility_outlined,
+                            label: 'Open',
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final bytes = await File(path).readAsBytes();
+                              if (!mounted) return;
+                              _showPreview(bytes, name);
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.share_rounded,
+                            label: 'Share',
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final bytes = await File(path).readAsBytes();
+                              await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.download_rounded,
+                            label: 'Download',
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final bytes = await File(path).readAsBytes();
+                              await Printing.layoutPdf(
+                                onLayout: (_) async => bytes,
+                                name: '$name.pdf',
+                                dynamicLayout: false,
+                              );
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.edit_rounded,
+                            label: 'Edit',
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              final formData = entry['formData'] as Map<String, dynamic>?;
+                              _openCreate(initialData: formData);
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.delete_rounded,
+                            label: 'Delete',
+                            color: scheme.error,
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final file = File(path);
+                              if (await file.exists()) await file.delete();
+                              await RecallStore.instance.removeRecentPdf(path);
+                              _load();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.share_rounded),
-              title: const Text('Share'),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final bytes = await File(path).readAsBytes();
-                await Printing.sharePdf(
-                  bytes: bytes,
-                  filename: '$name.pdf',
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.download_rounded),
-              title: const Text('Download'),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final bytes = await File(path).readAsBytes();
-                await Printing.layoutPdf(
-                  onLayout: (_) async => bytes,
-                  name: '$name.pdf',
-                  dynamicLayout: false,
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_rounded),
-              title: const Text('Edit'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                final formData = entry['formData'] as Map<String, dynamic>?;
-                _openCreate(initialData: formData);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_rounded, color: scheme.error),
-              title: Text('Delete', style: TextStyle(color: scheme.error)),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final file = File(path);
-                if (await file.exists()) await file.delete();
-                await RecallStore.instance.removeRecentPdf(path);
-                _load();
-              },
-            ),
-            const SizedBox(height: 8),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -379,8 +392,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                   : null;
                               return date != null ? _dayFmt.format(date) : '';
                             }(),
-                            onTap: () => _showActions(entry),
-                            onLongPress: () => _showActions(entry),
+                            onTap: (pos) => _showActions(entry, pos),
+                            onLongPress: (pos) => _showActions(entry, pos),
                           ),
                           if (entry != grouped[month]!.last)
                             Divider(
@@ -422,8 +435,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
 class _FileRow extends StatelessWidget {
   final String name;
   final String dateLabel;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final void Function(Offset position) onTap;
+  final void Function(Offset position) onLongPress;
 
   const _FileRow({
     required this.name,
@@ -435,9 +448,12 @@ class _FileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
+    Offset lastTapPosition = Offset.zero;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (d) => lastTapPosition = d.globalPosition,
+      onTap: () => onTap(lastTapPosition),
+      onLongPressStart: (d) => onLongPress(d.globalPosition),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
@@ -485,6 +501,108 @@ class _FileRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MenuAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _MenuAction({
+    required this.icon,
+    required this.label,
+    this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 19, color: color ?? scheme.onSurfaceVariant),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PdfPreviewPage extends StatelessWidget {
+  final Uint8List bytes;
+  final String name;
+
+  const _PdfPreviewPage({required this.bytes, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        backgroundColor: scheme.surface,
+        elevation: 0,
+        title: Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+            },
+            icon: const Icon(Icons.share_rounded),
+          ),
+          IconButton(
+            onPressed: () async {
+              await Printing.layoutPdf(
+                onLayout: (_) async => bytes,
+                name: '$name.pdf',
+                dynamicLayout: false,
+              );
+            },
+            icon: const Icon(Icons.download_rounded),
+          ),
+        ],
+      ),
+      body: PdfPreview(
+        build: (format) async => bytes,
+        canChangeOrientation: false,
+        canChangePageFormat: false,
+        canDebug: false,
+        useActions: false,
+        scrollViewDecoration: BoxDecoration(color: scheme.surfaceContainerHighest),
+        pdfPreviewPageDecoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        allowSharing: false,
+        allowPrinting: false,
+        pdfFileName: '$name.pdf',
       ),
     );
   }
