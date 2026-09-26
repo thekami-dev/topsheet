@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'data/recall_store.dart';
 import 'screens/library_screen.dart';
+import 'screens/onboarding_screen.dart';
 
 /* Hallmark · genre: dark-premium · macrostructure: Workbench
  * design-system: design.md · designed-as-app
@@ -92,9 +92,9 @@ ThemeData _buildTheme({required bool isDark}) {
         onInverseSurface: text,
       );
 
-  final baseTextTheme = GoogleFonts.interTextTheme(
-    isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
-  ).apply(bodyColor: text, displayColor: text);
+  final baseTextTheme =
+      (isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme)
+          .apply(fontFamily: 'Inter', bodyColor: text, displayColor: text);
 
   final textTheme = baseTextTheme.copyWith(
     displaySmall: baseTextTheme.displaySmall?.copyWith(
@@ -248,8 +248,29 @@ class TopsheetApp extends StatelessWidget {
           themeMode: mode,
           theme: _buildTheme(isDark: false),
           darkTheme: _buildTheme(isDark: true),
-          home: const LibraryScreen(),
+          home: const _StartupGate(),
         );
+      },
+    );
+  }
+}
+
+
+/// Decides between the onboarding flow and the library screen based on
+/// whether the user has completed first-run setup — checked once at
+/// startup so we don't flash the wrong screen.
+class _StartupGate extends StatelessWidget {
+  const _StartupGate();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: RecallStore.instance.onboardingComplete(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        return snapshot.data! ? const LibraryScreen() : const OnboardingScreen();
       },
     );
   }

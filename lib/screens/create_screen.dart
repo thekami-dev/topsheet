@@ -64,7 +64,9 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     if (widget.initialData != null) {
       _restoreFrom(widget.initialData!);
     } else {
-      _restoreLastPicks().whenComplete(_restoreDraft);
+      _restoreLastPicks().whenComplete(() {
+        _restoreDraft().whenComplete(_applyProfileDefaults);
+      });
     }
     RecallStore.instance.hintSeen().then((seen) {
       if (mounted && !seen) setState(() => _showHint = true);
@@ -124,7 +126,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     if (dept != null) {
       final subjectCode = draft['subjectCode'] as int?;
       if (subjectCode != null) {
-        final subjects = await AppDatabase.instance.subjectsForDept(dept.code);
+        final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(dept.code);
         for (final s in subjects) {
           if (s.code == subjectCode) {
             subject = s;
@@ -162,7 +164,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     final (deptCode, subjectCode, semester) = last;
     final dept = departmentByCode(deptCode);
     if (dept == null) return;
-    final subjects = await AppDatabase.instance.subjectsForDept(deptCode);
+    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(deptCode);
     Subject? subject;
     for (final s in subjects) {
       if (s.code == subjectCode) {
@@ -175,6 +177,34 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       _data.department = dept;
       _data.subject = subject;
       _data.semester = semester;
+    });
+  }
+
+  /// Fills in the user's onboarding profile (name, index, semester,
+  /// department) as a fallback — but only for fields still empty after
+  /// last-picks/draft restore, so recent usage history always wins over
+  /// the onboarding-time default.
+  Future<void> _applyProfileDefaults() async {
+    final profile = await RecallStore.instance.loadProfile();
+    if (profile == null || !mounted) return;
+    setState(() {
+      if (_studentNameCtrl.text.trim().isEmpty) {
+        _studentNameCtrl.text = profile['name'] as String? ?? '';
+      }
+      if (_studentIndexCtrl.text.trim().isEmpty) {
+        _studentIndexCtrl.text = profile['studentIndex'] as String? ?? '';
+      }
+      if (_data.semester.isEmpty) {
+        final semester = profile['semester'] as String?;
+        if (semester != null && semester.isNotEmpty) _data.semester = semester;
+      }
+      if (_data.department == null) {
+        final deptCode = profile['deptCode'] as int?;
+        if (deptCode != null) {
+          final dept = departmentByCode(deptCode);
+          if (dept != null) _data.department = dept;
+        }
+      }
     });
   }
 
@@ -196,16 +226,42 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     }
   }
 
+  Future<void> _pickSemester() async {
+    final result = await showSearchablePicker<String>(
+      context: context,
+      title: 'Select Semester',
+      items: semesters,
+      labelOf: (s) => s,
+    );
+    if (result != null) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _data.semester = result;
+        _errors.remove('semester');
+        // Changing semester invalidates a previously picked subject from
+        // a different semester.
+        _data.subject = null;
+      });
+    }
+  }
+
+  int? _semesterNumber() {
+    if (_data.semester.isEmpty) return null;
+    final idx = semesters.indexOf(_data.semester);
+    return idx == -1 ? null : idx + 1;
+  }
+
   Future<void> _pickSubject() async {
-    if (_data.department == null) return;
-    final subjects = await AppDatabase.instance.subjectsForDept(
+    if (_data.department == null || _data.semester.isEmpty) return;
+    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(
       _data.department!.code,
+      _semesterNumber(),
     );
     if (subjects.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No seeded subjects for this department yet'),
+          content: Text('No seeded subjects for this department/semester yet'),
         ),
       );
       return;
@@ -216,7 +272,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       title: 'Select Subject',
       items: subjects,
       labelOf: (s) => s.name,
-      subtitleOf: (s) => 'Code ${s.code} · Semester ${s.semester}',
+      subtitleOf: (s) => 'Code ${s.code}',
     );
     if (result != null) {
       HapticFeedback.selectionClick();
@@ -685,9 +741,17 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                     const SizedBox(height: 12),
                     _PickerField(
+                      label: 'Semester',
+                      value: _data.semester.isEmpty ? null : _data.semester,
+                      enabled: _data.department != null,
+                      onTap: _pickSemester,
+                      errorText: _errors['semester'],
+                    ),
+                    const SizedBox(height: 12),
+                    _PickerField(
                       label: 'Subject',
                       value: _data.subject?.name,
-                      enabled: _data.department != null,
+                      enabled: _data.department != null && _data.semester.isNotEmpty,
                       onTap: _pickSubject,
                       errorText: _errors['subject'],
                     ),
@@ -756,27 +820,6 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                       label: 'Board roll',
                       keyboardType: TextInputType.number,
                       errorText: _errors['boardRoll'],
-                    ),
-                    const SizedBox(height: 12),
-                    _PickerField(
-                      label: 'Semester',
-                      value: _data.semester.isEmpty ? null : _data.semester,
-                      errorText: _errors['semester'],
-                      onTap: () async {
-                        final result = await showSearchablePicker<String>(
-                          context: context,
-                          title: 'Select Semester',
-                          items: semesters,
-                          labelOf: (s) => s,
-                        );
-                        if (result != null) {
-                          HapticFeedback.selectionClick();
-                          setState(() {
-                            _data.semester = result;
-                            _errors.remove('semester');
-                          });
-                        }
-                      },
                     ),
                     const SizedBox(height: 12),
                     RecallTextField(
