@@ -271,17 +271,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
           child: _searching
               ? Container(
                   key: const ValueKey('search-field'),
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  height: 46,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(23),
+                    border: Border.all(
+                      color: scheme.outlineVariant.withValues(alpha: 0.7),
+                    ),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.search_rounded,
-                        size: 19,
+                        size: 20,
                         color: scheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: 10),
@@ -409,23 +412,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ],
               ],
             ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: scheme.primary.withValues(alpha: 0.45),
-              blurRadius: 16,
-              spreadRadius: 1,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        child: FloatingActionButton(
-          onPressed: _openCreate,
-          elevation: 0,
-          highlightElevation: 0,
-          child: const Icon(Icons.add_rounded),
+      floatingActionButton: Pressable(
+        onTap: _openCreate,
+        child: Container(
+          width: 58,
+          height: 58,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(19),
+          ),
+          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
         ),
       ),
     );
