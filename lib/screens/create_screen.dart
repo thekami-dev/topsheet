@@ -458,182 +458,19 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   }
 
   Future<void> _showPdfSheet(Uint8List bytes, String name) {
-    final scheme = Theme.of(context).colorScheme;
     final title = name.isEmpty ? 'Topsheet' : name;
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => DraggableScrollableSheet(
-        initialChildSize: 0.92,
-        minChildSize: 0.6,
-        maxChildSize: 0.96,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: ColoredBox(
-                  color: scheme.primaryContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: scheme.onPrimaryContainer,
-                                    ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Generated successfully. Preview, then share or save.',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: scheme.onPrimaryContainer
-                                          .withValues(alpha: 0.8),
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            Pressable(
-                              onTap: () => _savePdf(bytes, title),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: scheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: scheme.primary),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.download_rounded,
-                                      size: 18,
-                                      color: scheme.primary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Save',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            color: scheme.primary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Pressable(
-                              onTap: () => _sharePdf(bytes, title),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: scheme.primary,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.share_rounded,
-                                      size: 18,
-                                      color: scheme.onPrimary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Share',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            color: scheme.onPrimary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 8, 8),
-              child: Row(
-                children: [
-                  const SizedBox(width: 2),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  Pressable(
-                    onTap: () => Navigator.of(sheetContext).pop(),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(Icons.close),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-              Expanded(
-                child: PdfPreview(
-                  build: (format) async => bytes,
-                  canChangeOrientation: false,
-                  canChangePageFormat: false,
-                  canDebug: false,
-                  useActions: false,
-                  scrollViewDecoration: const BoxDecoration(
-                    color: Colors.white,
-                  ),
-                  pdfPreviewPageDecoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color.fromRGBO(0, 0, 0, 0.15),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  allowSharing: false,
-                  allowPrinting: false,
-                  pdfFileName: _pdfFileNameFor(title),
-                ),
-              ),
-          ],
+    return Navigator.of(context).push(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 280),
+        pageBuilder: (ctx, anim, secAnim) => FadeTransition(
+          opacity: anim,
+          child: _PdfResultPage(
+            bytes: bytes,
+            title: title,
+            fileName: _pdfFileNameFor(title),
+            onShare: () => _sharePdf(bytes, title),
+            onSave: () => _savePdf(bytes, title),
+          ),
         ),
       ),
     );
@@ -1352,6 +1189,157 @@ class _StatusBoard extends StatelessWidget {
                 color: scheme.outlineVariant,
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PdfResultPage extends StatelessWidget {
+  final Uint8List bytes;
+  final String title;
+  final String fileName;
+  final VoidCallback onShare;
+  final VoidCallback onSave;
+
+  const _PdfResultPage({
+    required this.bytes,
+    required this.title,
+    required this.fileName,
+    required this.onShare,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        backgroundColor: scheme.surface,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close_rounded),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(
+              'Ready to share',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: PdfPreview(
+              build: (format) async => bytes,
+              canChangeOrientation: false,
+              canChangePageFormat: false,
+              canDebug: false,
+              useActions: false,
+              scrollViewDecoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest,
+              ),
+              pdfPreviewPageDecoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              allowSharing: false,
+              allowPrinting: false,
+              pdfFileName: fileName,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              border: Border(top: BorderSide(color: scheme.outlineVariant)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: Pressable(
+                        onTap: onSave,
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: scheme.primary, width: 1.6),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.download_rounded, size: 19, color: scheme.primary),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Save',
+                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: Pressable(
+                        onTap: onShare,
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.share_rounded, size: 19, color: Colors.white),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Share',
+                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
