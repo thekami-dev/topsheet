@@ -14,14 +14,14 @@ import 'edit_profile_screen.dart';
  * design-system: design.md · designed-as-app
  */
 
-const _kGithubRepo = 'https://github.com/thekami-dev/topsheet';
-const _kGithubOrg = 'https://github.com/thekami-dev';
-const _kDiscord = 'https://www.thekami.tech/discord/';
-const _kLinkedIn = 'https://www.linkedin.com/company/thekamiofficial';
-const _kInstagram = 'https://www.instagram.com/thekami_official';
-const _kFacebook = 'https://www.facebook.com/thekamidev/';
-const _kSupport = 'https://www.supportkori.com/thekami';
-const _kThekamiSite = 'https://www.thekami.tech';
+const _kGithubRepo = 'https://github.com/thekami-dev/topsheet'\;
+const _kGithubOrg = 'https://github.com/thekami-dev'\;
+const _kDiscord = 'https://www.thekami.tech/discord/'\;
+const _kLinkedIn = 'https://www.linkedin.com/company/thekamiofficial'\;
+const _kInstagram = 'https://www.instagram.com/thekami_official'\;
+const _kFacebook = 'https://www.facebook.com/thekamidev/'\;
+const _kSupport = 'https://www.supportkori.com/thekami'\;
+const _kThekamiSite = 'https://www.thekami.tech'\;
 const _kThekamiLogo = 'assets/images/thekami_logo.png';
 
 class SettingsScreen extends StatefulWidget {
@@ -167,28 +167,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
           _SettingsGroup(
-            title: 'General',
-            children: [
-              _SettingsTile(
-                icon: const Icon(Icons.history_toggle_off_outlined, size: 20),
-                title: 'Clear remembered values',
-                subtitle:
-                    'Forgets saved teacher, student, and batch suggestions',
-                onTap: () async {
-                  await RecallStore.instance.clearAll();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Cleared remembered values'),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SettingsGroup(
             title: 'Appearance',
             children: [
               ValueListenableBuilder<ThemeMode>(
@@ -239,8 +217,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
           _SettingsGroup(
-            title: 'About',
+            title: 'General',
             children: [
+              _SettingsTile(
+                icon: const Icon(Icons.history_toggle_off_outlined, size: 20),
+                title: 'Clear remembered values',
+                subtitle:
+                    'Forgets saved teacher, student, and batch suggestions',
+                onTap: () async {
+                  await RecallStore.instance.clearAll();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Cleared remembered values'),
+                      ),
+                    );
+                  }
+                },
+              ),
               _SettingsTile(
                 icon: const Icon(Icons.info_outline_rounded, size: 20),
                 title: 'About Topsheet',
@@ -251,7 +245,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
           _SettingsGroup(
-            title: 'Community',
+            title: 'Connect & Support',
             children: [
               _SettingsTile(
                 icon: FaIcon(
@@ -262,15 +256,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Discord',
                 subtitle: 'Join the Thekami community',
                 onTap: () => _launch(_kDiscord),
-              ),
-              _SettingsTile(
-                icon: FaIcon(
-                  FontAwesomeIcons.linkedinIn,
-                  size: 18,
-                  color: scheme.onSurfaceVariant,
-                ),
-                title: 'LinkedIn',
-                onTap: () => _launch(_kLinkedIn),
               ),
               _SettingsTile(
                 icon: FaIcon(
@@ -290,20 +275,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Facebook',
                 onTap: () => _launch(_kFacebook),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SettingsGroup(
-            title: 'Open Source',
-            children: [
+              _SettingsTile(
+                icon: FaIcon(
+                  FontAwesomeIcons.linkedinIn,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
+                title: 'LinkedIn',
+                onTap: () => _launch(_kLinkedIn),
+              ),
               _SettingsTile(
                 icon: FaIcon(
                   FontAwesomeIcons.github,
                   size: 18,
                   color: scheme.onSurfaceVariant,
                 ),
-                title: 'View source on GitHub',
-                subtitle: 'Topsheet is free and open source',
+                title: 'Topsheet on GitHub',
+                subtitle: 'Free and open source \u2014 view the code',
                 onTap: () => _launch(_kGithubRepo),
               ),
               _SettingsTile(
@@ -315,20 +303,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Thekami on GitHub',
                 onTap: () => _launch(_kGithubOrg),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SettingsGroup(
-            title: 'Support',
-            children: [
               _SettingsTile(
                 icon: Icon(
-                  _isPlayStore == false ? Icons.star_outline_rounded : Icons.star_rounded,
+                  _isPlayStore == false
+                      ? Icons.star_outline_rounded
+                      : Icons.star_rounded,
                   size: 20,
                 ),
                 title: _isPlayStore == false ? 'Star on GitHub' : 'Rate Topsheet',
                 subtitle: _isPlayStore == false
-                    ? 'Give the project a star — it helps a lot'
+                    ? 'Give the project a star \u2014 it helps a lot'
                     : 'Enjoying the app? Leave a rating',
                 onTap: () => RatePromptService.instance.requestRatingOrStar(),
               ),
