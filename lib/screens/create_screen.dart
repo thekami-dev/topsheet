@@ -1249,21 +1249,27 @@ class _PdfResultPage extends StatelessWidget {
               canChangePageFormat: false,
               canDebug: false,
               useActions: false,
-              scrollViewDecoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-              ),
+              previewPageMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+              maxPageWidth: 680,
+              scrollViewDecoration: BoxDecoration(color: scheme.surface),
               pdfPreviewPageDecoration: BoxDecoration(
                 color: Colors.white,
+                borderRadius: BorderRadius.circular(3),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
+              loadingWidget: Center(
+                child: CircularProgressIndicator(color: scheme.primary),
+              ),
               allowSharing: false,
               allowPrinting: false,
+              pdfFileName: fileName,
+            ),
               pdfFileName: fileName,
             ),
           ),
