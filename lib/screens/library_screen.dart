@@ -607,7 +607,6 @@ class _PdfPreviewPage extends StatelessWidget {
         allowPrinting: false,
         pdfFileName: '$name.pdf',
       ),
-      ),
     );
   }
 }
