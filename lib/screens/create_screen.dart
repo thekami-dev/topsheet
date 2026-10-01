@@ -1270,8 +1270,6 @@ class _PdfResultPage extends StatelessWidget {
               allowPrinting: false,
               pdfFileName: fileName,
             ),
-              pdfFileName: fileName,
-            ),
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
