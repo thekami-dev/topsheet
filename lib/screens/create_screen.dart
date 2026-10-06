@@ -64,7 +64,8 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.initialData != null) {
-      _restoreFrom(widget.initialData!);
+      // Older saved topsheets have no institute; fill it from the profile.
+      _restoreFrom(widget.initialData!).whenComplete(_applyProfileDefaults);
     } else {
       _restoreLastPicks().whenComplete(() {
         _restoreDraft().whenComplete(_applyProfileDefaults);
