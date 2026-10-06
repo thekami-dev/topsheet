@@ -53,13 +53,13 @@ Future<pw.Document> buildTopsheetPdf(TopsheetData d) async {
 }
 
 pw.Widget _header(TopsheetData d) {
-  final name = d.instituteName.isNotEmpty ? d.instituteName : 'Institute Name';
   final children = <pw.Widget>[
-    pw.Text(
-      name,
-      style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: _ink),
-      textAlign: pw.TextAlign.center,
-    ),
+    if (d.instituteName.isNotEmpty)
+      pw.Text(
+        d.instituteName,
+        style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: _ink),
+        textAlign: pw.TextAlign.center,
+      ),
   ];
 
   if (d.instituteCode.isNotEmpty) {
