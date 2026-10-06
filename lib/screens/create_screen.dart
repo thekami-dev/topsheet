@@ -514,10 +514,8 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       body: Stack(
         children: [
           const _AtmosphereBackground(),
-          SafeArea(
-            child: ListView(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 74, 16, 48),
+          SafeArea(bottom: false, child: ListView(controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(16, 74, 16, 48 + MediaQuery.viewPaddingOf(context).bottom),
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),

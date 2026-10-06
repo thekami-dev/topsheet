@@ -134,7 +134,8 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
                   : ListView.builder(
                       key: const ValueKey('list'),
                       controller: scrollController,
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                      padding: EdgeInsets.fromLTRB(
+                        16, 0, 16, 20 + MediaQuery.viewPaddingOf(context).bottom),
                       physics: const BouncingScrollPhysics(
                         parent: AlwaysScrollableScrollPhysics(),
                       ),

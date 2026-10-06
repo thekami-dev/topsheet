@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 
 import 'data/recall_store.dart';
 import 'screens/library_screen.dart';
@@ -24,6 +25,13 @@ Future<void> applyThemeMode(String mode) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Edge-to-edge: draw behind system bars, keep bars transparent.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+  ));
   final saved = await RecallStore.instance.themeMode();
   themeModeNotifier.value = switch (saved) {
     'light' => ThemeMode.light,
@@ -248,6 +256,20 @@ class TopsheetApp extends StatelessWidget {
           themeMode: mode,
           theme: _buildTheme(isDark: false),
           darkTheme: _buildTheme(isDark: true),
+          builder: (context, child) {
+            final dark = Theme.of(context).brightness == Brightness.dark;
+            final icons = dark ? Brightness.light : Brightness.dark;
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                systemNavigationBarColor: Colors.transparent,
+                systemNavigationBarDividerColor: Colors.transparent,
+                statusBarIconBrightness: icons,
+                systemNavigationBarIconBrightness: icons,
+              ),
+              child: child!,
+            );
+          },
           home: const _StartupGate(),
         );
       },

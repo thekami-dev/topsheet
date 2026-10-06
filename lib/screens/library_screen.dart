@@ -362,7 +362,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : grouped.isEmpty
           ? _EmptyState(hasQuery: _query.isNotEmpty)
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 100 + MediaQuery.viewPaddingOf(context).bottom),
               children: [
                 for (final month in grouped.keys) ...[
                   Padding(
