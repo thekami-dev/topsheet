@@ -188,6 +188,11 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     final profile = await RecallStore.instance.loadProfile();
     if (profile == null || !mounted) return;
     setState(() {
+      // Institute isn't editable here, so the profile always wins.
+      _data.instituteName = profile['instituteName'] as String? ?? '';
+      _data.instituteCode = profile['instituteCode'] as String? ?? '';
+      _data.instituteAddress = profile['instituteAddress'] as String? ?? '';
+      _data.instituteWebsite = profile['instituteWebsite'] as String? ?? '';
       if (_studentNameCtrl.text.trim().isEmpty) {
         _studentNameCtrl.text = profile['name'] as String? ?? '';
       }
