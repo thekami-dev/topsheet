@@ -7,19 +7,13 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../models/topsheet_data.dart';
 
-// One palette, reused everywhere in the document — matches the app's own
-// seed color instead of a random blue that had nothing to do with it.
-const _ink = PdfColor.fromInt(0xFF1B2A26); // primary text
-const _muted = PdfColor.fromInt(0xFF5C6E68); // secondary text
-const _primary = PdfColor.fromInt(0xFF3E6259); // brand teal (app seed)
-const _primaryTint = PdfColor.fromInt(0xFFDCE8E3); // banner fill
-const _line = PdfColor.fromInt(0xFFB9C6C1); // borders — one weight, one color
-const _labelFill = PdfColor.fromInt(0xFFF1F4F3); // label-cell fill
+const _ink = PdfColor.fromInt(0xFF1B2733);
+const _muted = PdfColor.fromInt(0xFF5B6B7A);
+const _primary = PdfColor.fromInt(0xFF1E54B7);
+const _primaryTint = PdfColor.fromInt(0xFFE1EAFB);
+const _line = PdfColor.fromInt(0xFFC3CEDB);
+const _labelFill = PdfColor.fromInt(0xFFF1F4F8);
 
-/// Builds and serializes the PDF on a background isolate so layout +
-/// zLib compression never block the UI thread (the "Generating…" spinner
-/// stays animated on weak devices). The data crosses the boundary as a
-/// primitive-only map via [TopsheetData.toJson].
 Future<Uint8List> generateTopsheetPdf(TopsheetData d) {
   final snapshot = d.toJson();
   return Isolate.run(() async {
@@ -42,7 +36,7 @@ Future<pw.Document> buildTopsheetPdf(TopsheetData d) async {
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: [
-            _header(),
+            _header(d),
             pw.SizedBox(height: 16),
             _deptBanner(d),
             pw.SizedBox(height: 20),
@@ -58,40 +52,58 @@ Future<pw.Document> buildTopsheetPdf(TopsheetData d) async {
   return doc;
 }
 
-pw.Widget _header() => pw.Column(
-      children: [
-        pw.Text(
-          'MAWTS Institute of Technology',
-          style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: _ink),
-          textAlign: pw.TextAlign.center,
+pw.Widget _header(TopsheetData d) {
+  final name = d.instituteName.isNotEmpty ? d.instituteName : 'Institute Name';
+  final children = <pw.Widget>[
+    pw.Text(
+      name,
+      style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: _ink),
+      textAlign: pw.TextAlign.center,
+    ),
+  ];
+
+  if (d.instituteCode.isNotEmpty) {
+    children.addAll([
+      pw.SizedBox(height: 4),
+      pw.Text(
+        '(Institute Code: ${d.instituteCode})',
+        style: pw.TextStyle(fontSize: 11, color: _muted),
+        textAlign: pw.TextAlign.center,
+      ),
+    ]);
+  }
+
+  if (d.instituteAddress.isNotEmpty) {
+    children.addAll([
+      pw.SizedBox(height: 2),
+      pw.Text(
+        d.instituteAddress,
+        style: pw.TextStyle(fontSize: 11, color: _muted),
+        textAlign: pw.TextAlign.center,
+      ),
+    ]);
+  }
+
+  if (d.instituteWebsite.isNotEmpty) {
+    children.addAll([
+      pw.SizedBox(height: 2),
+      pw.RichText(
+        textAlign: pw.TextAlign.center,
+        text: pw.TextSpan(
+          children: [
+            pw.TextSpan(text: 'Web: ', style: pw.TextStyle(fontSize: 11, color: _muted)),
+            pw.TextSpan(
+              text: d.instituteWebsite,
+              style: pw.TextStyle(fontSize: 11, color: _primary, fontWeight: pw.FontWeight.bold),
+            ),
+          ],
         ),
-        pw.SizedBox(height: 4),
-        pw.Text(
-          '(Institute Code: 500123)',
-          style: pw.TextStyle(fontSize: 11, color: _muted),
-          textAlign: pw.TextAlign.center,
-        ),
-        pw.SizedBox(height: 2),
-        pw.Text(
-          '1/C-1/A, Pallabi, Mirpur-12, Dhaka-1216',
-          style: pw.TextStyle(fontSize: 11, color: _muted),
-          textAlign: pw.TextAlign.center,
-        ),
-        pw.SizedBox(height: 2),
-        pw.RichText(
-          textAlign: pw.TextAlign.center,
-          text: pw.TextSpan(
-            children: [
-              pw.TextSpan(text: 'Web: ', style: pw.TextStyle(fontSize: 11, color: _muted)),
-              pw.TextSpan(
-                text: 'www.mawts.org',
-                style: pw.TextStyle(fontSize: 11, color: _primary, fontWeight: pw.FontWeight.bold),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+      ),
+    ]);
+  }
+
+  return pw.Column(children: children);
+}
 
 pw.Widget _deptBanner(TopsheetData d) => pw.Container(
       width: double.infinity,

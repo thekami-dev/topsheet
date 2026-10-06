@@ -135,6 +135,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       studentIndex: _indexCtrl.text.trim(),
       instituteId: _institute!.id,
       instituteName: _institute!.name,
+      instituteCode: _institute!.code,
+      instituteAddress: _institute!.address,
+      instituteWebsite: _institute!.website,
       deptCode: _department!.code,
       semester: _semester!,
     );

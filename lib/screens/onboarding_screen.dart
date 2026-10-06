@@ -126,6 +126,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       studentIndex: _indexCtrl.text.trim(),
       instituteId: _selectedInstitute!.id,
       instituteName: _selectedInstitute!.name,
+      instituteCode: _selectedInstitute!.code,
+      instituteAddress: _selectedInstitute!.address,
+      instituteWebsite: _selectedInstitute!.website,
       deptCode: _selectedDept!.code,
       semester: _selectedSemester!,
     );

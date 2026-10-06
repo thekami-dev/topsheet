@@ -16,6 +16,10 @@ class TopsheetData {
   String teacherName;
   String teacherRole;
   String teacherDepartment;
+  String instituteName;
+  String instituteCode;
+  String instituteAddress;
+  String instituteWebsite;
 
   TopsheetData({
     this.department,
@@ -32,10 +36,12 @@ class TopsheetData {
     this.teacherName = '',
     this.teacherRole = '',
     this.teacherDepartment = '',
+    this.instituteName = '',
+    this.instituteCode = '',
+    this.instituteAddress = '',
+    this.instituteWebsite = '',
   });
 
-  /// Primitive-only snapshot, safe to send across isolate boundaries
-  /// (Department/Subject instances themselves are not sendable).
   Map<String, dynamic> toJson() => {
         'department': department == null
             ? null
@@ -64,6 +70,10 @@ class TopsheetData {
         'teacherName': teacherName,
         'teacherRole': teacherRole,
         'teacherDepartment': teacherDepartment,
+        'instituteName': instituteName,
+        'instituteCode': instituteCode,
+        'instituteAddress': instituteAddress,
+        'instituteWebsite': instituteWebsite,
       };
 
   factory TopsheetData.fromJson(Map<String, dynamic> json) {
@@ -97,6 +107,10 @@ class TopsheetData {
       teacherName: json['teacherName'] as String? ?? '',
       teacherRole: json['teacherRole'] as String? ?? '',
       teacherDepartment: json['teacherDepartment'] as String? ?? '',
+      instituteName: json['instituteName'] as String? ?? '',
+      instituteCode: json['instituteCode'] as String? ?? '',
+      instituteAddress: json['instituteAddress'] as String? ?? '',
+      instituteWebsite: json['instituteWebsite'] as String? ?? '',
     );
   }
 
