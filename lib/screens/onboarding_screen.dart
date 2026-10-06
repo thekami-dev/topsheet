@@ -704,7 +704,39 @@ String? _instituteSubtitle(Institute i) {
   return parts.isEmpty ? null : parts.join(' \u00b7 ');
 }
 
-class _InstituteStep extends StatelessWidget {
+/// Removes the Android overscroll glow on onboarding lists.
+class _NoGlow extends ScrollBehavior {
+  const _NoGlow();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
+}
+
+/// Flat search box shared by the institute and department lists.
+class _SearchBox extends StatelessWidget {
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  const _SearchBox({required this.hint, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search_rounded),
+      ),
+    );
+  }
+}
+
+class _InstituteStep extends StatefulWidget {
   final bool loading;
   final List<Institute> institutes;
   final Institute? selected;
@@ -718,33 +750,64 @@ class _InstituteStep extends StatelessWidget {
   });
 
   @override
+  State<_InstituteStep> createState() => _InstituteStepState();
+}
+
+class _InstituteStepState extends State<_InstituteStep> {
+  String _query = '';
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final q = _query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? widget.institutes
+        : widget.institutes.where((i) {
+            return i.name.toLowerCase().contains(q) ||
+                (i.code ?? '').toLowerCase().contains(q) ||
+                (i.address ?? '').toLowerCase().contains(q);
+          }).toList();
     return _StepScaffold(
       title: 'Your institute?',
       subtitle: 'Shown in the header of your Topsheet.',
-      child: loading
+      child: widget.loading
           ? const Center(child: CircularProgressIndicator())
-          : institutes.isEmpty
+          : widget.institutes.isEmpty
           ? _NotListedNotice(scheme: scheme)
-          : ListView.separated(
-              itemCount: institutes.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) {
-                if (i == institutes.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: _NotListedNotice(scheme: scheme),
-                  );
-                }
-                final inst = institutes[i];
-                return _OptionCard(
-                  title: inst.name,
-                  subtitle: _instituteSubtitle(inst),
-                  selected: selected?.id == inst.id,
-                  onTap: () => onSelect(inst),
-                );
-              },
+          : Column(
+              children: [
+                _SearchBox(
+                  hint: 'Search institute',
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ScrollConfiguration(
+                    behavior: const _NoGlow(),
+                    child: ListView.separated(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: filtered.length + 1,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, i) {
+                        if (i == filtered.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6, bottom: 16),
+                            child: _NotListedNotice(scheme: scheme),
+                          );
+                        }
+                        final inst = filtered[i];
+                        return _OptionCard(
+                          title: inst.name,
+                          subtitle: _instituteSubtitle(inst),
+                          selected: widget.selected?.id == inst.id,
+                          onTap: () => widget.onSelect(inst),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
     );
   }
@@ -775,7 +838,7 @@ class _NotListedNotice extends StatelessWidget {
   }
 }
 
-class _DepartmentStep extends StatelessWidget {
+class _DepartmentStep extends StatefulWidget {
   final Institute? institute;
   final Department? selected;
   final ValueChanged<Department> onSelect;
@@ -787,34 +850,78 @@ class _DepartmentStep extends StatelessWidget {
   });
 
   @override
+  State<_DepartmentStep> createState() => _DepartmentStepState();
+}
+
+class _DepartmentStepState extends State<_DepartmentStep> {
+  String _query = '';
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final depts = (institute?.departments ?? [])
+    final all = (widget.institute?.departments ?? [])
         .map(departmentByCode)
         .whereType<Department>()
         .toList();
+    // Only worth showing a search box when the list is long.
+    final showSearch = all.length > 5;
+    final q = showSearch ? _query.trim().toLowerCase() : '';
+    final filtered = q.isEmpty
+        ? all
+        : all.where((d) {
+            return d.longName.toLowerCase().contains(q) ||
+                d.shortName.toLowerCase().contains(q) ||
+                d.code.toString().contains(q);
+          }).toList();
     return _StepScaffold(
       title: 'Your department?',
       subtitle: 'Subjects for it are saved for offline use too.',
-      child: depts.isEmpty
+      child: all.isEmpty
           ? Text(
               'No departments listed for this institute yet.',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             )
-          : ListView.separated(
-              itemCount: depts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) {
-                final d = depts[i];
-                return _OptionCard(
-                  title: d.longName,
-                  subtitle: '${d.shortName} \u00b7 Code ${d.code}',
-                  selected: selected?.code == d.code,
-                  onTap: () => onSelect(d),
-                );
-              },
+          : Column(
+              children: [
+                if (showSearch) ...[
+                  _SearchBox(
+                    hint: 'Search department',
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No matches',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        )
+                      : ScrollConfiguration(
+                          behavior: const _NoGlow(),
+                          child: ListView.separated(
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, i) {
+                              final d = filtered[i];
+                              return _OptionCard(
+                                title: d.longName,
+                                subtitle: '${d.shortName} \u00b7 Code ${d.code}',
+                                selected: widget.selected?.code == d.code,
+                                onTap: () => widget.onSelect(d),
+                              );
+                            },
+                          ),
+                        ),
+                ),
+              ],
             ),
     );
   }
