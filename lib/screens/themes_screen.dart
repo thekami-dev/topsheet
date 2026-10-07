@@ -1,10 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../core/app_themes.dart';
 import '../core/motion.dart';
+import '../core/theme_previews.dart';
 import '../core/theme_reveal.dart';
 import '../main.dart' show themeModeNotifier, applyThemeMode;
 import '../widgets/pressable.dart';
@@ -13,7 +15,10 @@ class _Entry {
   final String id;
   final String name;
   final PaletteColors colors;
-  const _Entry(this.id, this.name, this.colors);
+
+  /// 3 hand-picked swatch colours: [background tone, accent, accent 2].
+  final List<Color> preview;
+  const _Entry(this.id, this.name, this.colors, this.preview);
 }
 
 void _setMode(ThemeMode m) {
@@ -52,15 +57,32 @@ class ThemesScreen extends StatelessWidget {
                   isDark && black ? pureBlackOf(c) : c;
               final entries = <_Entry>[
                 for (final p in kPalettes)
-                  _Entry(p.id, p.name, tone(isDark ? p.dark : p.light)),
+                  _Entry(
+                    p.id,
+                    p.name,
+                    tone(isDark ? p.dark : p.light),
+                    themePreviewColors(
+                      id: p.id,
+                      isDark: isDark,
+                      base: isDark ? p.dark : p.light,
+                      pureBlack: black,
+                    ),
+                  ),
               ];
               if (dyn != null) {
+                final dynColors = paletteFromScheme(dyn);
                 entries.insert(
                   1,
                   _Entry(
                     dynamicPaletteId,
                     'Dynamic',
-                    tone(paletteFromScheme(dyn)),
+                    tone(dynColors),
+                    themePreviewColors(
+                      id: dynamicPaletteId,
+                      isDark: isDark,
+                      base: dynColors,
+                      pureBlack: black,
+                    ),
                   ),
                 );
               }
@@ -237,9 +259,10 @@ class _ThemeGrid extends StatelessWidget {
   }
 }
 
-/// One round swatch: the palette's background as the disc, its two accent
-/// colours as the core. Selected = accent ring + small check badge.
+/// One round swatch: a single disc split into 3 pie wedges.
+/// Selected = accent ring around the whole disc + small check badge.
 class _ThemeSwatch extends StatelessWidget {
+  /// Outer size, ring included. The disc itself is 50 (60 - 2 * (3 + 2)).
   static const size = 60.0;
 
   final _Entry entry;
@@ -257,6 +280,7 @@ class _ThemeSwatch extends StatelessWidget {
     final c = entry.colors;
     final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final dur = reduced ? Duration.zero : Motion.standard;
+    final gap = Theme.of(context).scaffoldBackgroundColor;
 
     void tap() {
       final box = context.findRenderObject() as RenderBox;
@@ -289,25 +313,12 @@ class _ThemeSwatch extends StatelessWidget {
                     width: 2,
                   ),
                 ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: c.bg,
-                    border: Border.all(color: c.border),
-                  ),
-                  child: Center(
-                    child: ClipOval(
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: Row(
-                          children: [
-                            Expanded(child: ColoredBox(color: c.accent)),
-                            Expanded(child: ColoredBox(color: c.accent2)),
-                          ],
-                        ),
-                      ),
-                    ),
+                child: CustomPaint(
+                  painter: _TriSwatchPainter(
+                    c0: entry.preview[0],
+                    c1: entry.preview[1],
+                    c2: entry.preview[2],
+                    outline: c.border,
                   ),
                 ),
               ),
@@ -324,7 +335,7 @@ class _ThemeSwatch extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: c.accent,
                       shape: BoxShape.circle,
-                      border: Border.all(color: c.bg, width: 2),
+                      border: Border.all(color: gap, width: 2),
                     ),
                     child: Icon(
                       Icons.check_rounded,
@@ -340,4 +351,61 @@ class _ThemeSwatch extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Paints one disc made of three 120° wedges. Boundaries form a "Y":
+/// c0 = top wedge, c1 = lower-right wedge, c2 = lower-left wedge.
+class _TriSwatchPainter extends CustomPainter {
+  final Color c0;
+  final Color c1;
+  final Color c2;
+  final Color outline;
+
+  const _TriSwatchPainter({
+    required this.c0,
+    required this.c1,
+    required this.c2,
+    required this.outline,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    final rect = Rect.fromCircle(center: center, radius: r);
+    const sweep = 2 * math.pi / 3;
+    const start = -5 * math.pi / 6;
+
+    canvas.save();
+    canvas.clipPath(Path()..addOval(rect));
+
+    // Base disc in c0, then wedges 1 and 2 on top. Wedge 1 runs slightly
+    // under wedge 2 so the shared edge never shows a hairline seam.
+    canvas.drawCircle(center, r, Paint()..color = c0);
+    canvas.drawArc(
+      rect,
+      start + sweep,
+      sweep + 0.03,
+      true,
+      Paint()..color = c1,
+    );
+    canvas.drawArc(rect, start + 2 * sweep, sweep, true, Paint()..color = c2);
+    canvas.restore();
+
+    canvas.drawCircle(
+      center,
+      r - 0.5,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = outline,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TriSwatchPainter old) =>
+      old.c0 != c0 ||
+      old.c1 != c1 ||
+      old.c2 != c2 ||
+      old.outline != outline;
 }
