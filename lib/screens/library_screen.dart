@@ -158,8 +158,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       width: menuWidth,
                       decoration: BoxDecoration(
                         color: scheme.surfaceContainerHighest.withValues(alpha: 0.94),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: scheme.outlineVariant),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.35),
@@ -276,9 +275,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(23),
-                    border: Border.all(
-                      color: scheme.outlineVariant.withValues(alpha: 0.7),
-                    ),
                   ),
                   child: Row(
                     children: [
@@ -362,25 +358,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : grouped.isEmpty
           ? _EmptyState(hasQuery: _query.isNotEmpty)
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 100 + MediaQuery.viewPaddingOf(context).bottom),
               children: [
                 for (final month in grouped.keys) ...[
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8, top: 12, left: 2),
+                    padding: const EdgeInsets.only(bottom: 10, top: 12, left: 14),
                     child: Text(
-                      month.toUpperCase(),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.9,
-                      ),
+                      month,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: scheme.secondary),
                     ),
                   ),
                   Container(
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: scheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(28),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Column(
@@ -401,7 +392,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           if (entry != grouped[month]!.last)
                             Divider(
                               height: 1,
-                              indent: 16,
+                              indent: 72,
                               endIndent: 16,
                               color: scheme.outlineVariant,
                             ),
@@ -422,7 +413,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             color: scheme.primary,
             borderRadius: BorderRadius.circular(19),
           ),
-          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+          child: Icon(Icons.add_rounded, color: scheme.onPrimary, size: 28),
         ),
       ),
     );
@@ -452,7 +443,7 @@ class _FileRow extends StatelessWidget {
       onTap: () => onTap(lastTapPosition),
       onLongPressStart: (d) => onLongPress(d.globalPosition),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
             Container(
@@ -460,14 +451,13 @@ class _FileRow extends StatelessWidget {
               height: 40,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: scheme.outlineVariant),
+                color: scheme.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 Icons.picture_as_pdf_rounded,
                 size: 20,
-                color: scheme.primary,
+                color: scheme.secondary,
               ),
             ),
             const SizedBox(width: 12),
@@ -586,16 +576,22 @@ class _PdfPreviewPage extends StatelessWidget {
         canChangePageFormat: false,
         canDebug: false,
         useActions: false,
-        scrollViewDecoration: BoxDecoration(color: scheme.surfaceContainerHighest),
+        previewPageMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+        maxPageWidth: 680,
+        scrollViewDecoration: BoxDecoration(color: scheme.surface),
         pdfPreviewPageDecoration: BoxDecoration(
           color: Colors.white,
+          borderRadius: BorderRadius.circular(3),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.2),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
             ),
           ],
+        ),
+        loadingWidget: Center(
+          child: CircularProgressIndicator(color: scheme.primary),
         ),
         allowSharing: false,
         allowPrinting: false,
