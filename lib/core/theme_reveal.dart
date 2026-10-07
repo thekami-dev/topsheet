@@ -102,9 +102,6 @@ class _ThemeRevealHostState extends State<ThemeRevealHost>
     _busy = true;
     ui.Image? image;
     try {
-      if (kDebugMode && boundary.debugNeedsPaint) {
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
       image = await boundary.toImage(
         pixelRatio: MediaQuery.devicePixelRatioOf(context),
       );
