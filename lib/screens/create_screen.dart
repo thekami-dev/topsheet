@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../services/remote_data_service.dart';
+import '../models/institute.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
@@ -61,9 +64,12 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.initialData != null) {
-      _restoreFrom(widget.initialData!);
+      // Older saved topsheets have no institute; fill it from the profile.
+      _restoreFrom(widget.initialData!).whenComplete(_applyProfileDefaults);
     } else {
-      _restoreLastPicks().whenComplete(_restoreDraft);
+      _restoreLastPicks().whenComplete(() {
+        _restoreDraft().whenComplete(_applyProfileDefaults);
+      });
     }
     RecallStore.instance.hintSeen().then((seen) {
       if (mounted && !seen) setState(() => _showHint = true);
@@ -82,6 +88,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
 
   Map<String, dynamic> _draftJson() => {
     'deptCode': _data.department?.code,
+    'instituteName': _data.instituteName,
+    'instituteCode': _data.instituteCode,
+    'instituteAddress': _data.instituteAddress,
+    'instituteWebsite': _data.instituteWebsite,
     'subjectCode': _data.subject?.code,
     'semester': _data.semester,
     'exptNo': _exptNoCtrl.text,
@@ -123,7 +133,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     if (dept != null) {
       final subjectCode = draft['subjectCode'] as int?;
       if (subjectCode != null) {
-        final subjects = await AppDatabase.instance.subjectsForDept(dept.code);
+        final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(dept.code);
         for (final s in subjects) {
           if (s.code == subjectCode) {
             subject = s;
@@ -138,6 +148,14 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       if (dept != null) _data.department = dept;
       if (subject != null) _data.subject = subject;
       _data.semester = draft['semester'] as String? ?? _data.semester;
+      _data.instituteName =
+          draft['instituteName'] as String? ?? _data.instituteName;
+      _data.instituteCode =
+          draft['instituteCode'] as String? ?? _data.instituteCode;
+      _data.instituteAddress =
+          draft['instituteAddress'] as String? ?? _data.instituteAddress;
+      _data.instituteWebsite =
+          draft['instituteWebsite'] as String? ?? _data.instituteWebsite;
       _exptNoCtrl.text = draft['exptNo'] as String? ?? '';
       _exptNameCtrl.text = draft['exptName'] as String? ?? '';
       _studentNameCtrl.text = draft['studentName'] as String? ?? '';
@@ -161,7 +179,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     final (deptCode, subjectCode, semester) = last;
     final dept = departmentByCode(deptCode);
     if (dept == null) return;
-    final subjects = await AppDatabase.instance.subjectsForDept(deptCode);
+    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(deptCode);
     Subject? subject;
     for (final s in subjects) {
       if (s.code == subjectCode) {
@@ -175,6 +193,68 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       _data.subject = subject;
       _data.semester = semester;
     });
+  }
+
+  /// Fills in the user's onboarding profile (name, index, semester,
+  /// department) as a fallback — but only for fields still empty after
+  /// last-picks/draft restore, so recent usage history always wins over
+  /// the onboarding-time default.
+  Future<void> _applyProfileDefaults() async {
+    final profile = await RecallStore.instance.loadProfile();
+    if (profile == null || !mounted) return;
+    setState(() {
+      // Draft/edit data wins; profile only fills an empty institute.
+      if (_data.instituteName.isEmpty) {
+        _data.instituteName = profile['instituteName'] as String? ?? '';
+        _data.instituteCode = profile['instituteCode'] as String? ?? '';
+        _data.instituteAddress = profile['instituteAddress'] as String? ?? '';
+        _data.instituteWebsite = profile['instituteWebsite'] as String? ?? '';
+      }
+      if (_studentNameCtrl.text.trim().isEmpty) {
+        _studentNameCtrl.text = profile['name'] as String? ?? '';
+      }
+      if (_studentIndexCtrl.text.trim().isEmpty) {
+        _studentIndexCtrl.text = profile['studentIndex'] as String? ?? '';
+      }
+      if (_data.semester.isEmpty) {
+        final semester = profile['semester'] as String?;
+        if (semester != null && semester.isNotEmpty) _data.semester = semester;
+      }
+      if (_data.department == null) {
+        final deptCode = profile['deptCode'] as int?;
+        if (deptCode != null) {
+          final dept = departmentByCode(deptCode);
+          if (dept != null) _data.department = dept;
+        }
+      }
+    });
+  }
+
+  Future<void> _pickInstitute() async {
+    final raw = await RemoteDataService.instance.fetchInstitutes();
+    if (!mounted) return;
+    if (raw == null || raw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't load institutes")),
+      );
+      return;
+    }
+    final result = await showSearchablePicker<Institute>(
+      context: context,
+      title: 'Select Institute',
+      items: raw.map(Institute.fromJson).toList(),
+      labelOf: (i) => i.name,
+      subtitleOf: (i) => i.code == null ? '' : 'Code ${i.code}',
+    );
+    if (result != null) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _data.instituteName = result.name;
+        _data.instituteCode = result.code ?? '';
+        _data.instituteAddress = result.address ?? '';
+        _data.instituteWebsite = result.website ?? '';
+      });
+    }
   }
 
   Future<void> _pickDepartment() async {
@@ -195,16 +275,42 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     }
   }
 
+  Future<void> _pickSemester() async {
+    final result = await showSearchablePicker<String>(
+      context: context,
+      title: 'Select Semester',
+      items: semesters,
+      labelOf: (s) => s,
+    );
+    if (result != null) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _data.semester = result;
+        _errors.remove('semester');
+        // Changing semester invalidates a previously picked subject from
+        // a different semester.
+        _data.subject = null;
+      });
+    }
+  }
+
+  int? _semesterNumber() {
+    if (_data.semester.isEmpty) return null;
+    final idx = semesters.indexOf(_data.semester);
+    return idx == -1 ? null : idx + 1;
+  }
+
   Future<void> _pickSubject() async {
-    if (_data.department == null) return;
-    final subjects = await AppDatabase.instance.subjectsForDept(
+    if (_data.department == null || _data.semester.isEmpty) return;
+    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(
       _data.department!.code,
+      _semesterNumber(),
     );
     if (subjects.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No seeded subjects for this department yet'),
+          content: Text('No seeded subjects for this department/semester yet'),
         ),
       );
       return;
@@ -215,7 +321,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       title: 'Select Subject',
       items: subjects,
       labelOf: (s) => s.name,
-      subtitleOf: (s) => 'Code ${s.code} · Semester ${s.semester}',
+      subtitleOf: (s) => 'Code ${s.code}',
     );
     if (result != null) {
       HapticFeedback.selectionClick();
@@ -401,182 +507,19 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   }
 
   Future<void> _showPdfSheet(Uint8List bytes, String name) {
-    final scheme = Theme.of(context).colorScheme;
     final title = name.isEmpty ? 'Topsheet' : name;
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => DraggableScrollableSheet(
-        initialChildSize: 0.92,
-        minChildSize: 0.6,
-        maxChildSize: 0.96,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: ColoredBox(
-                  color: scheme.primaryContainer,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: scheme.onPrimaryContainer,
-                                    ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Generated successfully. Preview, then share or save.',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(
-                                      color: scheme.onPrimaryContainer
-                                          .withValues(alpha: 0.8),
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            Pressable(
-                              onTap: () => _savePdf(bytes, title),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: scheme.primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: scheme.primary),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.download_rounded,
-                                      size: 18,
-                                      color: scheme.primary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Save',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            color: scheme.primary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Pressable(
-                              onTap: () => _sharePdf(bytes, title),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: scheme.primary,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.share_rounded,
-                                      size: 18,
-                                      color: scheme.onPrimary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Share',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            color: scheme.onPrimary,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 2, 8, 8),
-              child: Row(
-                children: [
-                  const SizedBox(width: 2),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  Pressable(
-                    onTap: () => Navigator.of(sheetContext).pop(),
-                    child: const Padding(
-                      padding: EdgeInsets.all(8),
-                      child: Icon(Icons.close),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-              Expanded(
-                child: PdfPreview(
-                  build: (format) async => bytes,
-                  canChangeOrientation: false,
-                  canChangePageFormat: false,
-                  canDebug: false,
-                  useActions: false,
-                  scrollViewDecoration: const BoxDecoration(
-                    color: Colors.white,
-                  ),
-                  pdfPreviewPageDecoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color.fromRGBO(0, 0, 0, 0.15),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                  allowSharing: false,
-                  allowPrinting: false,
-                  pdfFileName: _pdfFileNameFor(title),
-                ),
-              ),
-          ],
+    return Navigator.of(context).push(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 280),
+        pageBuilder: (ctx, anim, secAnim) => FadeTransition(
+          opacity: anim,
+          child: _PdfResultPage(
+            bytes: bytes,
+            title: title,
+            fileName: _pdfFileNameFor(title),
+            onShare: () => _sharePdf(bytes, title),
+            onSave: () => _savePdf(bytes, title),
+          ),
         ),
       ),
     );
@@ -616,34 +559,28 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Create Topsheet'),
-            Text(
-              'Generate clean, share-ready practical sheets',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                letterSpacing: 0.08,
-              ),
-            ),
-          ],
-        ),
-
-      ),
+      extendBodyBehindAppBar: true,
       body: Stack(
         children: [
           const _AtmosphereBackground(),
-          SafeArea(
-            child: ListView(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+          SafeArea(bottom: false, child: ListView(controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(16, 74, 16, 48 + MediaQuery.viewPaddingOf(context).bottom),
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),
               children: [
+                Text(
+                  'Create Topsheet',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Generate a clean, share-ready practical sheet',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
                 AnimatedSize(
                   duration: Motion.standard,
                   curve: Motion.standardCurve,
@@ -673,10 +610,19 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 20),
                 _Section(
                   title: 'Course',
+                  icon: Icons.menu_book_rounded,
                   children: [
+                    _PickerField(
+                      label: 'Institute',
+                      value: _data.instituteName.isEmpty
+                          ? null
+                          : _data.instituteName,
+                      onTap: _pickInstitute,
+                    ),
+                    const SizedBox(height: 12),
                     _PickerField(
                       label: 'Department',
                       value: _data.department == null
@@ -687,17 +633,26 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                     const SizedBox(height: 12),
                     _PickerField(
+                      label: 'Semester',
+                      value: _data.semester.isEmpty ? null : _data.semester,
+                      enabled: _data.department != null,
+                      onTap: _pickSemester,
+                      errorText: _errors['semester'],
+                    ),
+                    const SizedBox(height: 12),
+                    _PickerField(
                       label: 'Subject',
                       value: _data.subject?.name,
-                      enabled: _data.department != null,
+                      enabled: _data.department != null && _data.semester.isNotEmpty,
                       onTap: _pickSubject,
                       errorText: _errors['subject'],
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Experiment',
+                  icon: Icons.science_rounded,
                   children: [
                     _TextInput(
                       controller: _exptNoCtrl,
@@ -732,9 +687,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Student',
+                  icon: Icons.school_rounded,
                   children: [
                     RecallTextField(
                       field: 'studentName',
@@ -758,27 +714,6 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                       errorText: _errors['boardRoll'],
                     ),
                     const SizedBox(height: 12),
-                    _PickerField(
-                      label: 'Semester',
-                      value: _data.semester.isEmpty ? null : _data.semester,
-                      errorText: _errors['semester'],
-                      onTap: () async {
-                        final result = await showSearchablePicker<String>(
-                          context: context,
-                          title: 'Select Semester',
-                          items: semesters,
-                          labelOf: (s) => s,
-                        );
-                        if (result != null) {
-                          HapticFeedback.selectionClick();
-                          setState(() {
-                            _data.semester = result;
-                            _errors.remove('semester');
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
                     RecallTextField(
                       field: 'batch',
                       label: 'Batch',
@@ -787,9 +722,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 _Section(
                   title: 'Teacher',
+                  icon: Icons.badge_rounded,
                   children: [
                     RecallTextField(
                       field: 'teacherName',
@@ -816,13 +752,70 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
               ],
             ),
           ),
+          // Floating header — blurred back button (left) + compact generate
+          // pill (right). Intentional blur exception: a small floating control
+          // over scrolling content, not a card/surface treatment.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _BlurIconButton(
+                      icon: Icons.arrow_back_rounded,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                    _GenerateFab(
+                      state: _fabState,
+                      onPressed: _generatePdf,
+                      shakeSignal: _fabShakeSignal,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: _GenerateFab(
-        state: _fabState,
-        onPressed: _generatePdf,
-        shakeSignal: _fabShakeSignal,
+    );
+  }
+}
+
+/// Small circular button with a frosted-glass backdrop blur — floats over
+/// scrolling content. Used only for this one floating control, not for
+/// cards/surfaces (see design.md).
+class _BlurIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _BlurIconButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Pressable(
+          onTap: onTap,
+          child: Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: scheme.surface.withValues(alpha: 0.55),
+              shape: BoxShape.circle,
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Icon(icon, size: 20, color: scheme.onSurface),
+          ),
+        ),
       ),
     );
   }
@@ -876,23 +869,31 @@ class _GenerateFabState extends State<_GenerateFab>
   @override
   Widget build(BuildContext context) {
     final tier = motionTierOf(context);
+    final scheme = Theme.of(context).colorScheme;
     final label = switch (widget.state) {
-      _FabState.idle => 'Generate & Share',
-      _FabState.generating => 'Generating…',
+      _FabState.idle => 'Generate',
+      _FabState.generating => 'Working…',
       _FabState.done => 'Saved',
     };
     final icon = switch (widget.state) {
-      _FabState.idle => const Icon(
-        Icons.picture_as_pdf_outlined,
+      _FabState.idle => Icon(
+        Icons.picture_as_pdf_rounded,
         key: ValueKey('idle'),
+        size: 17,
+        color: Theme.of(context).colorScheme.onPrimary,
       ),
-      _FabState.generating => const SizedBox(
+      _FabState.generating => SizedBox(
         key: ValueKey('spin'),
-        width: 18,
-        height: 18,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        width: 15,
+        height: 15,
+        child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary),
       ),
-      _FabState.done => const Icon(Icons.check_rounded, key: ValueKey('done')),
+      _FabState.done => Icon(
+        Icons.check_rounded,
+        key: ValueKey('done'),
+        size: 17,
+        color: Theme.of(context).colorScheme.onPrimary,
+      ),
     };
     return AnimatedBuilder(
       animation: _shakeController,
@@ -900,21 +901,50 @@ class _GenerateFabState extends State<_GenerateFab>
         offset: Offset(8 * _offsetFor(_shakeController.value), 0),
         child: child,
       ),
-      child: FloatingActionButton.extended(
-        heroTag: 'generate',
-        onPressed: widget.state == _FabState.idle ? widget.onPressed : null,
-        icon: AnimatedSwitcher(
-          duration: tier == MotionTier.reduced ? Motion.fast : Motion.standard,
-          reverseDuration: Motion.fast,
-          switchInCurve: Curves.easeOutBack,
-          switchOutCurve: Curves.easeOutCubic,
-          transitionBuilder: (child, anim) =>
-              ScaleTransition(scale: anim, child: child),
-          child: icon,
-        ),
-        label: AnimatedSwitcher(
-          duration: Motion.fast,
-          child: Text(label, key: ValueKey(label)),
+      child: Pressable(
+        onTap: widget.state == _FabState.idle ? widget.onPressed : null,
+        child: Container(
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.primary.withValues(alpha: 0.35),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSwitcher(
+                duration: tier == MotionTier.reduced
+                    ? Motion.fast
+                    : Motion.standard,
+                reverseDuration: Motion.fast,
+                switchInCurve: Curves.easeOutBack,
+                switchOutCurve: Curves.easeOutCubic,
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: icon,
+              ),
+              const SizedBox(width: 8),
+              AnimatedSwitcher(
+                duration: Motion.fast,
+                child: Text(
+                  label,
+                  key: ValueKey(label),
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1006,9 +1036,10 @@ class _HintBanner extends StatelessWidget {
 /// per-section icon or accent color.
 class _Section extends StatelessWidget {
   final String title;
+  final IconData? icon;
   final List<Widget> children;
 
-  const _Section({required this.title, required this.children});
+  const _Section({required this.title, this.icon, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -1018,14 +1049,31 @@ class _Section extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8, left: 2),
-          child: Text(
-            title.toUpperCase(),
-            style: textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.9,
-            ),
+          padding: const EdgeInsets.only(bottom: 10, left: 2),
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 15, color: scheme.primary),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                title.toUpperCase(),
+                style: textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.9,
+                ),
+              ),
+            ],
           ),
         ),
         Container(
@@ -1196,6 +1244,161 @@ class _StatusBoard extends StatelessWidget {
                 color: scheme.outlineVariant,
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PdfResultPage extends StatelessWidget {
+  final Uint8List bytes;
+  final String title;
+  final String fileName;
+  final VoidCallback onShare;
+  final VoidCallback onSave;
+
+  const _PdfResultPage({
+    required this.bytes,
+    required this.title,
+    required this.fileName,
+    required this.onShare,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        backgroundColor: scheme.surface,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close_rounded),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(
+              'Ready to share',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: PdfPreview(
+              build: (format) async => bytes,
+              canChangeOrientation: false,
+              canChangePageFormat: false,
+              canDebug: false,
+              useActions: false,
+              previewPageMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+              maxPageWidth: 680,
+              scrollViewDecoration: BoxDecoration(color: scheme.surface),
+              pdfPreviewPageDecoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              loadingWidget: Center(
+                child: CircularProgressIndicator(color: scheme.primary),
+              ),
+              allowSharing: false,
+              allowPrinting: false,
+              pdfFileName: fileName,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              border: Border(top: BorderSide(color: scheme.outlineVariant)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: Pressable(
+                        onTap: onSave,
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: scheme.primary, width: 1.6),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.download_rounded, size: 19, color: scheme.primary),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Save',
+                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: Pressable(
+                        onTap: onShare,
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: scheme.primary,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.share_rounded, size: 19, color: Theme.of(context).colorScheme.onPrimary),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Share',
+                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                  color: Theme.of(context).colorScheme.onPrimary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

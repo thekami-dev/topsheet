@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -85,153 +86,164 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _showPreview(Uint8List bytes, String name) {
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => DraggableScrollableSheet(
-        initialChildSize: 0.92,
-        minChildSize: 0.6,
-        maxChildSize: 0.96,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: PdfPreview(
-                build: (format) async => bytes,
-                canChangeOrientation: false,
-                canChangePageFormat: false,
-                canDebug: false,
-                useActions: false,
-                scrollViewDecoration: const BoxDecoration(color: Colors.white),
-                pdfPreviewPageDecoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color.fromRGBO(0, 0, 0, 0.15),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                allowSharing: false,
-                allowPrinting: false,
-                pdfFileName: '\$name.pdf',
-              ),
-            ),
-          ],
+    return Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.black54,
+        transitionDuration: const Duration(milliseconds: 260),
+        pageBuilder: (ctx, anim, secAnim) => FadeTransition(
+          opacity: anim,
+          child: _PdfPreviewPage(bytes: bytes, name: name),
         ),
       ),
     );
   }
 
-  Future<void> _showActions(Map<String, dynamic> entry) async {
+  Future<void> _showActions(Map<String, dynamic> entry, Offset tapPosition) async {
     final path = entry['path'] as String;
     final name = entry['name'] as String? ?? 'Topsheet';
     final scheme = Theme.of(context).colorScheme;
+    final screenSize = MediaQuery.of(context).size;
 
-    await showModalBottomSheet(
+    const menuWidth = 232.0;
+    const itemHeight = 46.0;
+    const headerHeight = 46.0;
+    const menuHeight = headerHeight + itemHeight * 5 + 12;
+
+    double left = tapPosition.dx - menuWidth + 24;
+    double top = tapPosition.dy - 12;
+    if (left < 16) left = 16;
+    if (left + menuWidth > screenSize.width - 16) {
+      left = screenSize.width - menuWidth - 16;
+    }
+    if (top + menuHeight > screenSize.height - 16) {
+      top = screenSize.height - menuHeight - 16;
+    }
+    if (top < 16) top = 16;
+
+    await showGeneralDialog(
       context: context,
-      backgroundColor: scheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+      barrierDismissible: true,
+      barrierLabel: 'menu',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (ctx, anim, secAnim) => const SizedBox.shrink(),
+      transitionBuilder: (ctx, anim, secAnim, child) {
+        return Stack(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
+            Positioned.fill(
+              child: FadeTransition(
+                opacity: anim,
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(ctx).pop(),
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(color: Colors.black.withValues(alpha: 0.18)),
                   ),
-                ],
+                ),
               ),
             ),
-            const Divider(height: 1),
-            ListTile(
-              leading: const Icon(Icons.visibility_outlined),
-              title: const Text('Open'),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final bytes = await File(path).readAsBytes();
-                if (!mounted) return;
-                _showPreview(bytes, name);
-              },
+            Positioned(
+              left: left,
+              top: top,
+              child: ScaleTransition(
+                scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                alignment: Alignment.topRight,
+                child: FadeTransition(
+                  opacity: anim,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: menuWidth,
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            blurRadius: 28,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                            child: Text(
+                              name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(ctx).textTheme.labelLarge,
+                            ),
+                          ),
+                          Divider(height: 1, color: scheme.outlineVariant),
+                          _MenuAction(
+                            icon: Icons.visibility_outlined,
+                            label: 'Open',
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final bytes = await File(path).readAsBytes();
+                              if (!mounted) return;
+                              _showPreview(bytes, name);
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.share_rounded,
+                            label: 'Share',
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final bytes = await File(path).readAsBytes();
+                              await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.download_rounded,
+                            label: 'Download',
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final bytes = await File(path).readAsBytes();
+                              await Printing.layoutPdf(
+                                onLayout: (_) async => bytes,
+                                name: '$name.pdf',
+                                dynamicLayout: false,
+                              );
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.edit_rounded,
+                            label: 'Edit',
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              final formData = entry['formData'] as Map<String, dynamic>?;
+                              _openCreate(initialData: formData);
+                            },
+                          ),
+                          _MenuAction(
+                            icon: Icons.delete_rounded,
+                            label: 'Delete',
+                            color: scheme.error,
+                            onTap: () async {
+                              Navigator.pop(ctx);
+                              final file = File(path);
+                              if (await file.exists()) await file.delete();
+                              await RecallStore.instance.removeRecentPdf(path);
+                              _load();
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.share_rounded),
-              title: const Text('Share'),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final bytes = await File(path).readAsBytes();
-                await Printing.sharePdf(
-                  bytes: bytes,
-                  filename: '$name.pdf',
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.download_rounded),
-              title: const Text('Download'),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final bytes = await File(path).readAsBytes();
-                await Printing.layoutPdf(
-                  onLayout: (_) async => bytes,
-                  name: '$name.pdf',
-                  dynamicLayout: false,
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_rounded),
-              title: const Text('Edit'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                final formData = entry['formData'] as Map<String, dynamic>?;
-                _openCreate(initialData: formData);
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.delete_rounded, color: scheme.error),
-              title: Text('Delete', style: TextStyle(color: scheme.error)),
-              onTap: () async {
-                Navigator.pop(sheetContext);
-                final file = File(path);
-                if (await file.exists()) await file.delete();
-                await RecallStore.instance.removeRecentPdf(path);
-                _load();
-              },
-            ),
-            const SizedBox(height: 8),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -242,17 +254,80 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: _searching
-            ? TextField(
-                controller: _searchCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Search topsheets…',
-                  border: InputBorder.none,
+        toolbarHeight: 68,
+        titleSpacing: _searching ? 4 : 20,
+        title: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.94, end: 1.0).animate(animation),
+              child: child,
+            ),
+          ),
+          child: _searching
+              ? Container(
+                  key: const ValueKey('search-field'),
+                  height: 46,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(23),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.search_rounded,
+                        size: 20,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          autofocus: true,
+                          cursorColor: scheme.primary,
+                          cursorWidth: 1.6,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            isCollapsed: true,
+                            hintText: 'Search topsheets…',
+                            hintStyle: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                          ),
+                          onChanged: (v) => setState(() => _query = v),
+                        ),
+                      ),
+                      if (_query.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Pressable(
+                          onTap: () {
+                            _searchCtrl.clear();
+                            setState(() => _query = '');
+                          },
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 17,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                )
+              : Text(
+                  'Topsheet',
+                  key: const ValueKey('title'),
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                onChanged: (v) => setState(() => _query = v),
-              )
-            : const Text('Topsheet'),
+        ),
         actions: [
           Pressable(
             onTap: () => setState(() {
@@ -283,25 +358,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : grouped.isEmpty
           ? _EmptyState(hasQuery: _query.isNotEmpty)
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 100 + MediaQuery.viewPaddingOf(context).bottom),
               children: [
                 for (final month in grouped.keys) ...[
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8, top: 12, left: 2),
+                    padding: const EdgeInsets.only(bottom: 10, top: 12, left: 14),
                     child: Text(
-                      month.toUpperCase(),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.9,
-                      ),
+                      month,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: scheme.secondary),
                     ),
                   ),
                   Container(
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: scheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(28),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Column(
@@ -316,13 +386,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                   : null;
                               return date != null ? _dayFmt.format(date) : '';
                             }(),
-                            onTap: () => _showActions(entry),
-                            onLongPress: () => _showActions(entry),
+                            onTap: (pos) => _showActions(entry, pos),
+                            onLongPress: (pos) => _showActions(entry, pos),
                           ),
                           if (entry != grouped[month]!.last)
                             Divider(
                               height: 1,
-                              indent: 16,
+                              indent: 72,
                               endIndent: 16,
                               color: scheme.outlineVariant,
                             ),
@@ -333,9 +403,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ],
               ],
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreate,
-        child: const Icon(Icons.add_rounded),
+      floatingActionButton: Pressable(
+        onTap: _openCreate,
+        child: Container(
+          width: 58,
+          height: 58,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(19),
+          ),
+          child: Icon(Icons.add_rounded, color: scheme.onPrimary, size: 28),
+        ),
       ),
     );
   }
@@ -344,8 +423,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
 class _FileRow extends StatelessWidget {
   final String name;
   final String dateLabel;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
+  final void Function(Offset position) onTap;
+  final void Function(Offset position) onLongPress;
 
   const _FileRow({
     required this.name,
@@ -357,11 +436,14 @@ class _FileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
+    Offset lastTapPosition = Offset.zero;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (d) => lastTapPosition = d.globalPosition,
+      onTap: () => onTap(lastTapPosition),
+      onLongPressStart: (d) => onLongPress(d.globalPosition),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
             Container(
@@ -369,14 +451,13 @@ class _FileRow extends StatelessWidget {
               height: 40,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: scheme.outlineVariant),
+                color: scheme.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 Icons.picture_as_pdf_rounded,
                 size: 20,
-                color: scheme.primary,
+                color: scheme.secondary,
               ),
             ),
             const SizedBox(width: 12),
@@ -407,6 +488,114 @@ class _FileRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MenuAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _MenuAction({
+    required this.icon,
+    required this.label,
+    this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, size: 19, color: color ?? scheme.onSurfaceVariant),
+            const SizedBox(width: 14),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PdfPreviewPage extends StatelessWidget {
+  final Uint8List bytes;
+  final String name;
+
+  const _PdfPreviewPage({required this.bytes, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      appBar: AppBar(
+        backgroundColor: scheme.surface,
+        elevation: 0,
+        title: Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        actions: [
+          IconButton(
+            onPressed: () async {
+              await Printing.sharePdf(bytes: bytes, filename: '$name.pdf');
+            },
+            icon: const Icon(Icons.share_rounded),
+          ),
+          IconButton(
+            onPressed: () async {
+              await Printing.layoutPdf(
+                onLayout: (_) async => bytes,
+                name: '$name.pdf',
+                dynamicLayout: false,
+              );
+            },
+            icon: const Icon(Icons.download_rounded),
+          ),
+        ],
+      ),
+      body: PdfPreview(
+        build: (format) async => bytes,
+        canChangeOrientation: false,
+        canChangePageFormat: false,
+        canDebug: false,
+        useActions: false,
+        previewPageMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+        maxPageWidth: 680,
+        scrollViewDecoration: BoxDecoration(color: scheme.surface),
+        pdfPreviewPageDecoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(3),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.28),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        loadingWidget: Center(
+          child: CircularProgressIndicator(color: scheme.primary),
+        ),
+        allowSharing: false,
+        allowPrinting: false,
+        pdfFileName: '$name.pdf',
       ),
     );
   }

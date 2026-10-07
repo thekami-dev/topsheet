@@ -1,15 +1,15 @@
-name: Build & Release APK
+name: Publish to Play Store
 
 on:
   push:
-    branches: [ shoudo ]
+    branches: [ internal, closed-testing, open-testing, production ]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,28 +54,28 @@ jobs:
           CODE=$(git rev-list --count HEAD)
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
 
-      - name: Build release APK (split per ABI + shrink)
-        run: |
-          flutter build apk --release --split-per-abi --obfuscate \
-            --split-debug-info=build/debug-info \
-            --build-name=${{ steps.version.outputs.version }} \
-            --build-number=${{ steps.code.outputs.code }}
-
-      - name: Build release AAB (App Bundle)
+      - name: Build release AAB
         run: |
           flutter build appbundle --release --obfuscate \
             --split-debug-info=build/debug-info-aab \
             --build-name=${{ steps.version.outputs.version }} \
             --build-number=${{ steps.code.outputs.code }}
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Map branch to Play Console track
+        id: track
+        run: |
+          case "${{ github.ref_name }}" in
+            internal) echo "track=internal" >> "$GITHUB_OUTPUT" ;;
+            closed-testing) echo "track=alpha" >> "$GITHUB_OUTPUT" ;;
+            open-testing) echo "track=beta" >> "$GITHUB_OUTPUT" ;;
+            production) echo "track=production" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Upload to Play Console
+        uses: r0adkll/upload-google-play@v1
         with:
-          tag_name: v${{ steps.version.outputs.version }}-${{ github.run_number }}
-          name: topsheet v${{ steps.version.outputs.version }} (build ${{ github.run_number }})
-          files: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            build/app/outputs/bundle/release/app-release.aab
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.thekami.topsheet
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          track: ${{ steps.track.outputs.track }}
+          status: completed
