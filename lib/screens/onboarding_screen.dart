@@ -24,7 +24,7 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final _pageController = PageController();
-  int _step = 0;
+  int _step = 0; // 0 = welcome, 1..5 = form steps
 
   final _nameCtrl = TextEditingController();
   final _indexCtrl = TextEditingController();
@@ -36,8 +36,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _selectedSemester;
   bool _saving = false;
 
-  // Step 0 is the welcome screen — not part of the progress bar/skip flow.
-  static const _formSteps = ['Name', 'Index', 'Institute', 'Department', 'Semester'];
+  static const _formSteps = [
+    'Name',
+    'Index',
+    'Institute',
+    'Department',
+    'Semester',
+  ];
+
+  // Shown by the "?" button: why each step asks what it asks.
+  static const _helpTitles = [
+    'Why we ask your name',
+    'Why we ask your roll or index',
+    'Why we ask your institute',
+    'Why we ask your department',
+    'Why we ask your semester',
+  ];
+
+  static const _helpBodies = [
+    'Printed under "Submitted by" on every Topsheet, so you never retype it. '
+        'It stays on your device. You can change it anytime in '
+        'Settings > Edit profile.',
+    'Printed next to your name on the Topsheet and pre-filled whenever you '
+        'create one. Any format works.',
+    'The institute name, code, address and website go in the header of every '
+        'Topsheet. It also decides which departments you can pick next.',
+    'Used to load the right subjects for you. They are downloaded once and '
+        'then work offline.',
+    'Pre-selects your semester when you create a Topsheet. You can still '
+        'change it each time.',
+  ];
 
   @override
   void initState() {
@@ -84,6 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _goTo(int step) async {
     HapticFeedback.selectionClick();
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _step = step);
     await _pageController.animateToPage(
       step,
@@ -110,6 +139,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _goTo(_step - 1);
   }
 
+  void _onInstituteSelected(Institute inst) {
+    final depts = inst.departments
+        .map(departmentByCode)
+        .whereType<Department>()
+        .toList();
+    setState(() {
+      _selectedInstitute = inst;
+      // Only one option? Pre-select it so the user just taps next.
+      _selectedDept = depts.length == 1 ? depts.first : null;
+    });
+  }
+
   Future<void> _skip() async {
     HapticFeedback.mediumImpact();
     await RecallStore.instance.skipOnboarding();
@@ -126,6 +167,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       studentIndex: _indexCtrl.text.trim(),
       instituteId: _selectedInstitute!.id,
       instituteName: _selectedInstitute!.name,
+      instituteCode: _selectedInstitute!.code,
+      instituteAddress: _selectedInstitute!.address,
+      instituteWebsite: _selectedInstitute!.website,
       deptCode: _selectedDept!.code,
       semester: _selectedSemester!,
     );
@@ -136,6 +180,36 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ).pushReplacement(MaterialPageRoute(builder: (_) => const LibraryScreen()));
   }
 
+  void _showHelp() {
+    HapticFeedback.selectionClick();
+    final i = _formStep;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_helpTitles[i], style: theme.textTheme.titleLarge),
+                const SizedBox(height: 10),
+                Text(
+                  _helpBodies[i],
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -143,73 +217,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            if (!_isWelcome)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Row(
-                  children: [
-                    Pressable(
-                      onTap: _back,
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 14),
-                        child: Icon(
-                          Icons.arrow_back_rounded,
-                          color: scheme.onSurfaceVariant,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Row(
-                        children: List.generate(_formSteps.length, (i) {
-                          final active = i <= _formStep;
-                          return Expanded(
-                            child: Container(
-                              height: 3,
-                              margin: EdgeInsets.only(
-                                right: i == _formSteps.length - 1 ? 0 : 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: active
-                                    ? scheme.primary
-                                    : scheme.outlineVariant,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Pressable(
-                      onTap: _skip,
-                      child: Text(
-                        'Skip',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            _buildHeader(scheme),
             Expanded(
               child: PageView(
                 controller: _pageController,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _WelcomeStep(onSkip: _skip),
-                  _NameStep(controller: _nameCtrl, onChanged: () => setState(() {})),
-                  _IndexStep(controller: _indexCtrl, onChanged: () => setState(() {})),
+                  const _WelcomeStep(),
+                  _NameStep(
+                    controller: _nameCtrl,
+                    onChanged: () => setState(() {}),
+                    onSubmit: _next,
+                  ),
+                  _IndexStep(
+                    controller: _indexCtrl,
+                    onChanged: () => setState(() {}),
+                    onSubmit: _next,
+                  ),
                   _InstituteStep(
                     loading: _loadingInstitutes,
                     institutes: _institutes ?? [],
                     selected: _selectedInstitute,
-                    onSelect: (inst) => setState(() {
-                      _selectedInstitute = inst;
-                      _selectedDept = null;
-                    }),
+                    onSelect: _onInstituteSelected,
                   ),
                   _DepartmentStep(
                     institute: _selectedInstitute,
@@ -223,45 +252,69 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
+            _buildFooter(scheme),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(ColorScheme scheme) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 12, 0),
+      child: SizedBox(
+        height: 44,
+        child: Row(
+          children: [
+            if (!_isWelcome)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: scheme.outlineVariant),
+                ),
+                child: Text(
+                  '${_formStep + 1}/${_formSteps.length}',
+                  style: textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ),
+            const Spacer(),
+            if (!_isWelcome)
+              Semantics(
+                button: true,
+                label: 'Why we ask this',
                 child: Pressable(
-                  onTap: (_isWelcome || _canProceed) && !_saving ? _next : null,
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: (_isWelcome || _canProceed)
-                          ? scheme.primary
-                          : scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16),
+                  onTap: _showHelp,
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Icon(
+                      Icons.help_outline_rounded,
+                      color: scheme.onSurfaceVariant,
+                      size: 22,
                     ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            _isWelcome
-                                ? 'Get started'
-                                : (_formStep == _formSteps.length - 1
-                                      ? 'Finish'
-                                      : 'Continue'),
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  color: (_isWelcome || _canProceed)
-                                      ? Colors.white
-                                      : scheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
-                          ),
+                  ),
+                ),
+              ),
+            Pressable(
+              onTap: _saving ? null : _skip,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                child: Text(
+                  'Skip',
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -271,59 +324,166 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
+
+  Widget _buildFooter(ColorScheme scheme) {
+    final isLast = !_isWelcome && _formStep == _formSteps.length - 1;
+    final enabled = (_isWelcome || _canProceed) && !_saving;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+      child: Row(
+        children: [
+          if (!_isWelcome)
+            Semantics(
+              button: true,
+              label: 'Back',
+              child: Pressable(
+                onTap: _saving ? null : _back,
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(color: scheme.outlineVariant),
+                  ),
+                  child: Icon(Icons.arrow_back_rounded, color: scheme.onSurface),
+                ),
+              ),
+            ),
+          const Spacer(),
+          Semantics(
+            button: true,
+            label: isLast ? 'Finish' : 'Next',
+            child: Pressable(
+              onTap: enabled ? _next : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 72,
+                height: 56,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: enabled
+                      ? scheme.primary
+                      : scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: _saving
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: scheme.onPrimary,
+                        ),
+                      )
+                    : Icon(
+                        isLast
+                            ? Icons.check_rounded
+                            : Icons.arrow_forward_rounded,
+                        color: enabled
+                            ? scheme.onPrimary
+                            : scheme.onSurfaceVariant,
+                      ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _WelcomeStep extends StatelessWidget {
-  final VoidCallback onSkip;
-  const _WelcomeStep({required this.onSkip});
+  const _WelcomeStep();
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 36, 28, 16),
+      children: [
+        Text('Welcome to\nTopsheet', style: textTheme.displaySmall),
+        const SizedBox(height: 14),
+        Text(
+          'Make a clean, share-ready practical sheet in a few taps. '
+          'Set up once, and your details are ready every time.',
+          style: textTheme.bodyLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 32),
+        const _FeatureRow(
+          icon: Icons.bolt_rounded,
+          title: 'Sheets in seconds',
+          body: 'Pick the subject, fill in the details, get a PDF.',
+        ),
+        const _FeatureRow(
+          icon: Icons.history_rounded,
+          title: 'Remembers for you',
+          body: 'Name, batch and teacher are suggested next time.',
+        ),
+        const _FeatureRow(
+          icon: Icons.cloud_off_rounded,
+          title: 'Works offline',
+          body: 'Subjects are saved for offline use, and your sheets stay on '
+              'your phone.',
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Setup is 5 quick questions and takes under a minute.',
+          style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeatureRow extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+
+  const _FeatureRow({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
-      child: Column(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 64,
-            height: 64,
+            width: 44,
+            height: 44,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(18),
+              color: scheme.primary.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(
-              Icons.description_rounded,
-              color: Colors.white,
-              size: 30,
-            ),
+            child: Icon(icon, color: scheme.secondary, size: 22),
           ),
-          const SizedBox(height: 32),
-          Text(
-            'Welcome to\nTopsheet',
-            style: Theme.of(context).textTheme.displaySmall,
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'A quick setup so your details are ready every time you '
-            'generate a practical sheet. Takes less than a minute.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant, height: 1.5),
-          ),
-          const SizedBox(height: 28),
-          Pressable(
-            onTap: onSkip,
-            child: Text(
-              'Skip for now',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
-                decorationColor: scheme.onSurfaceVariant,
-              ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: textTheme.titleMedium),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -347,7 +507,7 @@ class _StepScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 32, 28, 0),
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -359,7 +519,7 @@ class _StepScaffold extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           Expanded(child: child),
         ],
       ),
@@ -367,55 +527,47 @@ class _StepScaffold extends StatelessWidget {
   }
 }
 
-/// Shared minimalist text-input look — underline only, no box/border, so it
-/// reads as a real form rather than a boxed "AI-generated" widget.
-class _UnderlineField extends StatelessWidget {
+/// Same filled + bordered look as the fields in the rest of the app
+/// (comes from the app-wide InputDecorationTheme).
+class _InputField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
-  final TextInputType? keyboardType;
   final TextCapitalization textCapitalization;
-  final List<TextInputFormatter>? inputFormatters;
   final VoidCallback onChanged;
+  final VoidCallback onSubmit;
 
-  const _UnderlineField({
+  const _InputField({
     required this.controller,
     required this.hint,
-    this.keyboardType,
     this.textCapitalization = TextCapitalization.none,
-    this.inputFormatters,
     required this.onChanged,
+    required this.onSubmit,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return TextField(
-      controller: controller,
-      autofocus: true,
-      keyboardType: keyboardType,
-      textCapitalization: textCapitalization,
-      inputFormatters: inputFormatters,
-      style: Theme.of(
-        context,
-      ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-      cursorColor: scheme.primary,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: Theme.of(context).textTheme.headlineSmall?.copyWith(
-          color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
-          fontWeight: FontWeight.w600,
+    return Align(
+      alignment: Alignment.topCenter,
+      child: TextField(
+        controller: controller,
+        autofocus: true,
+        textCapitalization: textCapitalization,
+        textInputAction: TextInputAction.next,
+        cursorColor: scheme.primary,
+        style: Theme.of(
+          context,
+        ).textTheme.titleMedium?.copyWith(fontSize: 18),
+        decoration: InputDecoration(
+          hintText: hint,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
         ),
-        filled: false,
-        contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        border: UnderlineInputBorder(borderSide: BorderSide(color: scheme.outlineVariant)),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: scheme.outlineVariant),
-        ),
-        focusedBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: scheme.primary, width: 2),
-        ),
+        onChanged: (_) => onChanged(),
+        onSubmitted: (_) => onSubmit(),
       ),
-      onChanged: (_) => onChanged(),
     );
   }
 }
@@ -423,19 +575,25 @@ class _UnderlineField extends StatelessWidget {
 class _NameStep extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onChanged;
+  final VoidCallback onSubmit;
 
-  const _NameStep({required this.controller, required this.onChanged});
+  const _NameStep({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmit,
+  });
 
   @override
   Widget build(BuildContext context) {
     return _StepScaffold(
       title: "What's your name?",
       subtitle: "We'll use this on every Topsheet you generate.",
-      child: _UnderlineField(
+      child: _InputField(
         controller: controller,
         hint: 'Your full name',
         textCapitalization: TextCapitalization.words,
         onChanged: onChanged,
+        onSubmit: onSubmit,
       ),
     );
   }
@@ -444,26 +602,141 @@ class _NameStep extends StatelessWidget {
 class _IndexStep extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onChanged;
+  final VoidCallback onSubmit;
 
-  const _IndexStep({required this.controller, required this.onChanged});
+  const _IndexStep({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmit,
+  });
 
   @override
   Widget build(BuildContext context) {
     return _StepScaffold(
       title: 'Your roll or index?',
-      subtitle:
-          'Any format works \u2014 numbers, or something like CST-M-2217.',
-      child: _UnderlineField(
+      subtitle: 'Any format works \u2014 numbers, or something like CST-M-2217.',
+      child: _InputField(
         controller: controller,
         hint: 'e.g. 123456 or CST-M-2217',
         textCapitalization: TextCapitalization.characters,
         onChanged: onChanged,
+        onSubmit: onSubmit,
       ),
     );
   }
 }
 
-class _InstituteStep extends StatelessWidget {
+/// Selectable card used for institute and department lists.
+class _OptionCard extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _OptionCard({
+    required this.title,
+    this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Pressable(
+      onTap: onTap,
+      pressedScale: 0.99,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.10)
+              : scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? scheme.primary : scheme.outlineVariant,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: selected ? scheme.secondary : null,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle!,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (selected) ...[
+              const SizedBox(width: 12),
+              Icon(Icons.check_circle_rounded, color: scheme.primary, size: 22),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String? _instituteSubtitle(Institute i) {
+  final parts = <String>[
+    if (i.code != null && i.code!.isNotEmpty) 'Code ${i.code}',
+    if (i.address != null && i.address!.isNotEmpty) i.address!,
+  ];
+  return parts.isEmpty ? null : parts.join(' \u00b7 ');
+}
+
+/// Removes the Android overscroll glow on onboarding lists.
+class _NoGlow extends ScrollBehavior {
+  const _NoGlow();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
+}
+
+/// Flat search box shared by the institute and department lists.
+class _SearchBox extends StatelessWidget {
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  const _SearchBox({required this.hint, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search_rounded),
+      ),
+    );
+  }
+}
+
+class _InstituteStep extends StatefulWidget {
   final bool loading;
   final List<Institute> institutes;
   final Institute? selected;
@@ -477,61 +750,69 @@ class _InstituteStep extends StatelessWidget {
   });
 
   @override
+  State<_InstituteStep> createState() => _InstituteStepState();
+}
+
+class _InstituteStepState extends State<_InstituteStep> {
+  String _query = '';
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final q = _query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? widget.institutes
+        : widget.institutes.where((i) {
+            return i.name.toLowerCase().contains(q) ||
+                (i.code ?? '').toLowerCase().contains(q) ||
+                (i.address ?? '').toLowerCase().contains(q);
+          }).toList();
     return _StepScaffold(
       title: 'Your institute?',
-      subtitle: 'We use this to load the right subjects for you.',
-      child: loading
+      subtitle: 'Shown in the header of your Topsheet.',
+      child: widget.loading
           ? const Center(child: CircularProgressIndicator())
-          : institutes.isEmpty
+          : widget.institutes.isEmpty
           ? _NotListedNotice(scheme: scheme)
-          : ListView.separated(
-              itemCount: institutes.length + 1,
-              separatorBuilder: (_, __) => const SizedBox(height: 4),
-              itemBuilder: (context, i) {
-                if (i == institutes.length) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: _NotListedNotice(scheme: scheme),
-                  );
-                }
-                final inst = institutes[i];
-                final isSelected = selected?.id == inst.id;
-                return Pressable(
-                  onTap: () => onSelect(inst),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: scheme.outlineVariant),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            inst.name,
-                            style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSelected ? scheme.primary : null,
-                                ),
-                          ),
-                        ),
-                        if (isSelected)
-                          Icon(Icons.check_rounded, color: scheme.primary, size: 20),
-                      ],
+          : Column(
+              children: [
+                _SearchBox(
+                  hint: 'Search institute',
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ScrollConfiguration(
+                    behavior: const _NoGlow(),
+                    child: ListView.separated(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      itemCount: filtered.length + 1,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, i) {
+                        if (i == filtered.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 6, bottom: 16),
+                            child: _NotListedNotice(scheme: scheme),
+                          );
+                        }
+                        final inst = filtered[i];
+                        return _OptionCard(
+                          title: inst.name,
+                          subtitle: _instituteSubtitle(inst),
+                          selected: widget.selected?.id == inst.id,
+                          onTap: () => widget.onSelect(inst),
+                        );
+                      },
                     ),
                   ),
-                );
-              },
+                ),
+              ],
             ),
     );
   }
 }
+
 class _NotListedNotice extends StatelessWidget {
   final ColorScheme scheme;
   const _NotListedNotice({required this.scheme});
@@ -540,9 +821,10 @@ class _NotListedNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text.rich(
       TextSpan(
-        style: Theme.of(
-          context,
-        ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.5),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+          height: 1.5,
+        ),
         children: const [
           TextSpan(text: "Can't find your institute? Email "),
           TextSpan(
@@ -556,7 +838,7 @@ class _NotListedNotice extends StatelessWidget {
   }
 }
 
-class _DepartmentStep extends StatelessWidget {
+class _DepartmentStep extends StatefulWidget {
   final Institute? institute;
   final Department? selected;
   final ValueChanged<Department> onSelect;
@@ -568,58 +850,78 @@ class _DepartmentStep extends StatelessWidget {
   });
 
   @override
+  State<_DepartmentStep> createState() => _DepartmentStepState();
+}
+
+class _DepartmentStepState extends State<_DepartmentStep> {
+  String _query = '';
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final depts = (institute?.departments ?? [])
+    final all = (widget.institute?.departments ?? [])
         .map(departmentByCode)
         .whereType<Department>()
         .toList();
+    // Only worth showing a search box when the list is long.
+    final showSearch = all.length > 5;
+    final q = showSearch ? _query.trim().toLowerCase() : '';
+    final filtered = q.isEmpty
+        ? all
+        : all.where((d) {
+            return d.longName.toLowerCase().contains(q) ||
+                d.shortName.toLowerCase().contains(q) ||
+                d.code.toString().contains(q);
+          }).toList();
     return _StepScaffold(
       title: 'Your department?',
-      subtitle: 'Subjects for this department will be ready offline too.',
-      child: depts.isEmpty
+      subtitle: 'Subjects for it are saved for offline use too.',
+      child: all.isEmpty
           ? Text(
               'No departments listed for this institute yet.',
               style: Theme.of(
                 context,
               ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             )
-          : ListView.separated(
-              itemCount: depts.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 4),
-              itemBuilder: (context, i) {
-                final d = depts[i];
-                final isSelected = selected?.code == d.code;
-                return Pressable(
-                  onTap: () => onSelect(d),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: scheme.outlineVariant),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
+          : Column(
+              children: [
+                if (showSearch) ...[
+                  _SearchBox(
+                    hint: 'Search department',
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
                           child: Text(
-                            '${d.shortName} \u00b7 ${d.longName}',
-                            style: Theme.of(context).textTheme.bodyLarge
-                                ?.copyWith(
-                                  fontWeight: isSelected
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: isSelected ? scheme.primary : null,
-                                ),
+                            'No matches',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        )
+                      : ScrollConfiguration(
+                          behavior: const _NoGlow(),
+                          child: ListView.separated(
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, i) {
+                              final d = filtered[i];
+                              return _OptionCard(
+                                title: d.longName,
+                                subtitle: '${d.shortName} \u00b7 Code ${d.code}',
+                                selected: widget.selected?.code == d.code,
+                                onTap: () => widget.onSelect(d),
+                              );
+                            },
                           ),
                         ),
-                        if (isSelected)
-                          Icon(Icons.check_rounded, color: scheme.primary, size: 20),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                ),
+              ],
             ),
     );
   }
@@ -646,11 +948,14 @@ class _SemesterStep extends StatelessWidget {
           final isSelected = selected == s;
           return Pressable(
             onTap: () => onSelect(s),
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: isSelected ? scheme.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
+                color: isSelected
+                    ? scheme.primary
+                    : scheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isSelected ? scheme.primary : scheme.outlineVariant,
                 ),
@@ -658,7 +963,7 @@ class _SemesterStep extends StatelessWidget {
               child: Text(
                 s,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: isSelected ? Colors.white : scheme.onSurface,
+                  color: isSelected ? scheme.onPrimary : scheme.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
               ),

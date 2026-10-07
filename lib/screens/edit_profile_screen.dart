@@ -135,6 +135,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       studentIndex: _indexCtrl.text.trim(),
       instituteId: _institute!.id,
       instituteName: _institute!.name,
+      instituteCode: _institute!.code,
+      instituteAddress: _institute!.address,
+      instituteWebsite: _institute!.website,
       deptCode: _department!.code,
       semester: _semester!,
     );
@@ -154,7 +157,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 32 + MediaQuery.viewPaddingOf(context).bottom),
               children: [
                 Text(
                   'NAME',
@@ -207,7 +210,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 const SizedBox(height: 28),
                 SizedBox(
                   width: double.infinity,
-                  height: 50,
+                  height: 56,
                   child: Pressable(
                     onTap: _canSave && !_saving ? _save : null,
                     child: Container(
@@ -216,23 +219,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         color: _canSave
                             ? scheme.primary
                             : scheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(28),
                       ),
                       child: _saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
+                          ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: scheme.onPrimary))
                           : Text(
                               'Save',
                               style: Theme.of(context).textTheme.labelLarge
                                   ?.copyWith(
                                     color: _canSave
-                                        ? Colors.white
+                                        ? scheme.onPrimary
                                         : scheme.onSurfaceVariant,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -265,11 +261,10 @@ class _FieldTile extends StatelessWidget {
     return Pressable(
       onTap: enabled ? onTap : null,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
           children: [
