@@ -72,43 +72,21 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
       builder: (context, scrollController) => Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.title,
-                    style: textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.1,
-                    ),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.title, style: textTheme.titleLarge),
+                const SizedBox(height: 14),
+                TextField(
+                  autofocus: false,
+                  decoration: const InputDecoration(
+                    hintText: 'Search',
+                    prefixIcon: Icon(Icons.search_rounded),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Type to filter and pick quickly',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      letterSpacing: 0.06,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    autofocus: false,
-                    decoration: const InputDecoration(
-                      hintText: 'Search',
-                      prefixIcon: Icon(Icons.search_rounded),
-                    ),
-                    onChanged: (v) => setState(() => _query = v),
-                  ),
-                ],
-              ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -149,19 +127,15 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
                             onTap: () => _select(item),
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: scheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: scheme.outlineVariant),
+                                color: scheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: ListTile(
                                 title: Text(widget.labelOf(item)),
                                 subtitle: widget.subtitleOf != null
                                     ? Text(widget.subtitleOf!(item))
                                     : null,
-                                trailing: Icon(
-                                  Icons.north_east_rounded,
-                                  color: scheme.primary,
-                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                               ),
                             ),
                           ),
