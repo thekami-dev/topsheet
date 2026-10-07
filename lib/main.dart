@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'core/app_themes.dart';
 import 'core/motion.dart';
+import 'core/theme_reveal.dart';
 import 'data/recall_store.dart';
 import 'screens/library_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -280,12 +281,14 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
   );
 }
 
-/// How long a palette / light-dark change takes to morph across the app.
+/// How long MaterialApp's own cross-fade takes (used for light/dark and
+/// pure-black changes).
 ///
-/// Follows the motion system: the OS "reduce motion" flag switches the
-/// morph off entirely, and sustained jank (weak device) shortens it to a
-/// quick cross-fade.
+/// While a circular theme reveal is running it is zero, so the two effects
+/// never overlap. The OS "reduce motion" flag switches the fade off, and
+/// sustained jank (weak device) shortens it.
 Duration _themeMorphDuration() {
+  if (ThemeReveal.instance.running) return Duration.zero;
   final osReduced = WidgetsBinding
       .instance
       .platformDispatcher
@@ -320,8 +323,6 @@ class TopsheetApp extends StatelessWidget {
                   title: 'Topsheet',
                   debugShowCheckedModeBanner: false,
                   themeMode: mode,
-                  // MaterialApp wraps the whole app in an AnimatedTheme, so
-                  // every screen, dialog and sheet morphs together.
                   themeAnimationDuration: morph,
                   themeAnimationCurve: Motion.standardCurve,
                   theme: _buildTheme(
@@ -353,7 +354,7 @@ class TopsheetApp extends StatelessWidget {
                         statusBarIconBrightness: icons,
                         systemNavigationBarIconBrightness: icons,
                       ),
-                      child: child!,
+                      child: ThemeRevealHost(child: child!),
                     );
                   },
                   home: const _StartupGate(),

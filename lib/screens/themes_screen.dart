@@ -1,9 +1,11 @@
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../core/app_themes.dart';
 import '../core/motion.dart';
+import '../core/theme_reveal.dart';
 import '../main.dart' show themeModeNotifier, applyThemeMode;
 import '../widgets/pressable.dart';
 
@@ -62,6 +64,12 @@ class ThemesScreen extends StatelessWidget {
                   ),
                 );
               }
+              final currentName = entries
+                  .firstWhere(
+                    (e) => e.id == current,
+                    orElse: () => entries.first,
+                  )
+                  .name;
               return ListView(
                 padding: EdgeInsets.only(top: 8, bottom: 32 + bottomInset),
                 children: [
@@ -148,7 +156,18 @@ class ThemesScreen extends StatelessWidget {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 28, 20, 14),
-                    child: Text('COLOR THEME', style: textTheme.labelSmall),
+                    child: Row(
+                      children: [
+                        Text('COLOR THEME', style: textTheme.labelSmall),
+                        const Spacer(),
+                        Text(
+                          currentName,
+                          style: textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -156,9 +175,10 @@ class ThemesScreen extends StatelessWidget {
                   ),
                   if (dyn != null)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                       child: Text(
-                        'Dynamic uses the colours of your wallpaper.',
+                        'Dynamic uses the colours of your wallpaper. '
+                        'Long-press a circle to see its name.',
                         style: textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -174,11 +194,9 @@ class ThemesScreen extends StatelessWidget {
   }
 }
 
-/// Responsive grid of compact swatches (3 columns on a typical phone).
+/// Grid of round swatches, evenly spaced; columns adapt to the width.
 class _ThemeGrid extends StatelessWidget {
-  static const _gap = 10.0;
-  static const _minTileW = 96.0;
-  static const _tileH = 80.0;
+  static const _minCellW = 72.0;
 
   final List<_Entry> entries;
   final String current;
@@ -189,26 +207,27 @@ class _ThemeGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, box) {
-        final cols = ((box.maxWidth + _gap) / (_minTileW + _gap))
-            .floor()
-            .clamp(2, 6)
-            .toInt();
-        final tileW = (box.maxWidth - _gap * (cols - 1)) / cols;
+        final cols = (box.maxWidth / _minCellW).floor().clamp(3, 8).toInt();
+        final cellW = (box.maxWidth / cols).floorToDouble();
         return Wrap(
-          spacing: _gap,
-          runSpacing: _gap,
+          runSpacing: 10,
           children: [
             for (final e in entries)
               SizedBox(
-                width: tileW,
-                height: _tileH,
-                child: _ThemeSwatch(
-                  entry: e,
-                  selected: e.id == current,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    applyThemePalette(e.id);
-                  },
+                width: cellW,
+                height: _ThemeSwatch.size,
+                child: Center(
+                  child: _ThemeSwatch(
+                    entry: e,
+                    selected: e.id == current,
+                    onTap: (origin) {
+                      if (e.id == current) return;
+                      HapticFeedback.selectionClick();
+                      ThemeReveal.instance.run(origin, () {
+                        applyThemePalette(e.id);
+                      });
+                    },
+                  ),
                 ),
               ),
           ],
@@ -218,12 +237,14 @@ class _ThemeGrid extends StatelessWidget {
   }
 }
 
-/// One compact swatch: the palette's own background, a pill with its key
-/// colours, and its name. Selected = accent ring + small check.
+/// One round swatch: the palette's background as the disc, its two accent
+/// colours as the core. Selected = accent ring + small check badge.
 class _ThemeSwatch extends StatelessWidget {
+  static const size = 60.0;
+
   final _Entry entry;
   final bool selected;
-  final VoidCallback onTap;
+  final void Function(Offset origin) onTap;
 
   const _ThemeSwatch({
     required this.entry,
@@ -234,108 +255,86 @@ class _ThemeSwatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = entry.colors;
-    final textTheme = Theme.of(context).textTheme;
     final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
     final dur = reduced ? Duration.zero : Motion.standard;
 
-    Widget dot(Color color) => Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
+    void tap() {
+      final box = context.findRenderObject() as RenderBox;
+      onTap(box.localToGlobal(box.size.center(Offset.zero)));
+    }
 
     return Semantics(
       button: true,
       selected: selected,
       label: entry.name,
       excludeSemantics: true,
-      onTap: onTap,
-      child: Pressable(
-        onTap: onTap,
-        pressedScale: 0.97,
-        child: AnimatedContainer(
-          duration: dur,
-          curve: Motion.standardCurve,
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: selected ? c.accent : Colors.transparent,
-              width: 2,
-            ),
-          ),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: c.bg,
-              borderRadius: BorderRadius.circular(17),
-              border: Border.all(color: c.border),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: c.surface2,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+      onTap: tap,
+      child: Tooltip(
+        message: entry.name,
+        child: Pressable(
+          onTap: tap,
+          pressedScale: 0.92,
+          child: Stack(
+            children: [
+              AnimatedContainer(
+                duration: dur,
+                curve: Motion.standardCurve,
+                width: size,
+                height: size,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? c.accent : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c.bg,
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Center(
+                    child: ClipOval(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            dot(c.accent),
-                            const SizedBox(width: 4),
-                            dot(c.accent2),
-                            const SizedBox(width: 4),
-                            dot(c.success),
+                            Expanded(child: ColoredBox(color: c.accent)),
+                            Expanded(child: ColoredBox(color: c.accent2)),
                           ],
                         ),
                       ),
-                      const Spacer(),
-                      AnimatedScale(
-                        scale: selected ? 1 : 0.6,
-                        duration: dur,
-                        curve: Motion.standardCurve,
-                        child: AnimatedOpacity(
-                          opacity: selected ? 1 : 0,
-                          duration: dur,
-                          child: Container(
-                            width: 18,
-                            height: 18,
-                            decoration: BoxDecoration(
-                              color: c.accent,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.check_rounded,
-                              size: 12,
-                              color: c.onAccent,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    entry.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.labelLarge?.copyWith(
-                      color: c.text,
-                      fontSize: 12.5,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: AnimatedScale(
+                  scale: selected ? 1 : 0,
+                  duration: dur,
+                  curve: Motion.standardCurve,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: c.accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c.bg, width: 2),
+                    ),
+                    child: Icon(
+                      Icons.check_rounded,
+                      size: 12,
+                      color: c.onAccent,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
