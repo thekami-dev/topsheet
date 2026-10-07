@@ -368,12 +368,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: _saving
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: scheme.onPrimary,
                         ),
                       )
                     : Icon(
@@ -381,7 +381,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                             ? Icons.check_rounded
                             : Icons.arrow_forward_rounded,
                         color: enabled
-                            ? Colors.white
+                            ? scheme.onPrimary
                             : scheme.onSurfaceVariant,
                       ),
               ),
@@ -963,7 +963,7 @@ class _SemesterStep extends StatelessWidget {
               child: Text(
                 s,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: isSelected ? Colors.white : scheme.onSurface,
+                  color: isSelected ? scheme.onPrimary : scheme.onSurface,
                   fontWeight: FontWeight.w700,
                 ),
               ),

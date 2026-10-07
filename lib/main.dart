@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
+import 'core/app_themes.dart';
 import 'data/recall_store.dart';
 import 'screens/library_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -32,6 +34,7 @@ void main() async {
     systemNavigationBarColor: Colors.transparent,
     systemNavigationBarDividerColor: Colors.transparent,
   ));
+  await loadThemePalette();
   final saved = await RecallStore.instance.themeMode();
   themeModeNotifier.value = switch (saved) {
     'light' => ThemeMode.light,
@@ -69,15 +72,15 @@ class AppColorsLight {
   static const error = Color(0xFFE0393E);
 }
 
-ThemeData _buildTheme({required bool isDark}) {
-  final c = isDark ? AppColors.bg : AppColorsLight.bg;
-  final surface = isDark ? AppColors.surface : AppColorsLight.surface;
-  final surface2 = isDark ? AppColors.surface2 : AppColorsLight.surface2;
-  final border = isDark ? AppColors.border : AppColorsLight.border;
-  final text = isDark ? AppColors.text : AppColorsLight.text;
-  final text2 = isDark ? AppColors.text2 : AppColorsLight.text2;
-  final accent = isDark ? AppColors.accent : AppColorsLight.accent;
-  final error = isDark ? AppColors.error : AppColorsLight.error;
+ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
+  final c = p.bg;
+  final surface = p.surface;
+  final surface2 = p.surface2;
+  final border = p.border;
+  final text = p.text;
+  final text2 = p.text2;
+  final accent = p.accent;
+  final error = p.error;
 
   final scheme =
       (isDark ? const ColorScheme.dark() : const ColorScheme.light()).copyWith(
@@ -88,11 +91,11 @@ ThemeData _buildTheme({required bool isDark}) {
         outline: border,
         outlineVariant: border,
         primary: accent,
-        onPrimary: Colors.white,
+        onPrimary: p.onAccent,
         primaryContainer: surface2,
         onPrimaryContainer: text,
-        secondary: isDark ? AppColors.accent2 : AppColorsLight.accent2,
-        tertiary: isDark ? AppColors.success : AppColorsLight.success,
+        secondary: p.accent2,
+        tertiary: p.success,
         error: error,
         onError: Colors.white,
         shadow: Colors.black,
@@ -210,7 +213,7 @@ ThemeData _buildTheme({required bool isDark}) {
       elevation: 0,
       highlightElevation: 0,
       backgroundColor: accent,
-      foregroundColor: Colors.white,
+      foregroundColor: p.onAccent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
@@ -250,33 +253,56 @@ class TopsheetApp extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeModeNotifier,
       builder: (context, mode, _) {
-        return MaterialApp(
-          title: 'Topsheet',
-          debugShowCheckedModeBanner: false,
-          themeMode: mode,
-          theme: _buildTheme(isDark: false),
-          darkTheme: _buildTheme(isDark: true),
-          builder: (context, child) {
-            final dark = Theme.of(context).brightness == Brightness.dark;
-            final icons = dark ? Brightness.light : Brightness.dark;
-            return AnnotatedRegion<SystemUiOverlayStyle>(
-              value: SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                systemNavigationBarColor: Colors.transparent,
-                systemNavigationBarDividerColor: Colors.transparent,
-                statusBarIconBrightness: icons,
-                systemNavigationBarIconBrightness: icons,
-              ),
-              child: child!,
+        return ValueListenableBuilder<String>(
+          valueListenable: themePaletteNotifier,
+          builder: (context, paletteId, _) {
+            return DynamicColorBuilder(
+              builder: (lightDynamic, darkDynamic) {
+                return MaterialApp(
+                  title: 'Topsheet',
+                  debugShowCheckedModeBanner: false,
+                  themeMode: mode,
+                  theme: _buildTheme(
+                    isDark: false,
+                    p: resolvePalette(
+                      paletteId,
+                      false,
+                      dynamicScheme: lightDynamic,
+                    ),
+                  ),
+                  darkTheme: _buildTheme(
+                    isDark: true,
+                    p: resolvePalette(
+                      paletteId,
+                      true,
+                      dynamicScheme: darkDynamic,
+                    ),
+                  ),
+                  builder: (context, child) {
+                    final dark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    final icons = dark ? Brightness.light : Brightness.dark;
+                    return AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        systemNavigationBarColor: Colors.transparent,
+                        systemNavigationBarDividerColor: Colors.transparent,
+                        statusBarIconBrightness: icons,
+                        systemNavigationBarIconBrightness: icons,
+                      ),
+                      child: child!,
+                    );
+                  },
+                  home: const _StartupGate(),
+                );
+              },
             );
           },
-          home: const _StartupGate(),
         );
       },
     );
   }
 }
-
 
 /// Decides between the onboarding flow and the library screen based on
 /// whether the user has completed first-run setup — checked once at

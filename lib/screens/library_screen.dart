@@ -422,7 +422,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             color: scheme.primary,
             borderRadius: BorderRadius.circular(19),
           ),
-          child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+          child: Icon(Icons.add_rounded, color: scheme.onPrimary, size: 28),
         ),
       ),
     );

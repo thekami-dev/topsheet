@@ -876,23 +876,23 @@ class _GenerateFabState extends State<_GenerateFab>
       _FabState.done => 'Saved',
     };
     final icon = switch (widget.state) {
-      _FabState.idle => const Icon(
+      _FabState.idle => Icon(
         Icons.picture_as_pdf_rounded,
         key: ValueKey('idle'),
         size: 17,
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.onPrimary,
       ),
-      _FabState.generating => const SizedBox(
+      _FabState.generating => SizedBox(
         key: ValueKey('spin'),
         width: 15,
         height: 15,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary),
       ),
-      _FabState.done => const Icon(
+      _FabState.done => Icon(
         Icons.check_rounded,
         key: ValueKey('done'),
         size: 17,
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.onPrimary,
       ),
     };
     return AnimatedBuilder(
@@ -938,7 +938,7 @@ class _GenerateFabState extends State<_GenerateFab>
                   label,
                   key: ValueKey(label),
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1380,12 +1380,12 @@ class _PdfResultPage extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.share_rounded, size: 19, color: Colors.white),
+                              Icon(Icons.share_rounded, size: 19, color: Theme.of(context).colorScheme.onPrimary),
                               const SizedBox(width: 8),
                               Text(
                                 'Share',
                                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  color: Colors.white,
+                                  color: Theme.of(context).colorScheme.onPrimary,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),

@@ -222,20 +222,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: _saving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
+                          ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: scheme.onPrimary))
                           : Text(
                               'Save',
                               style: Theme.of(context).textTheme.labelLarge
                                   ?.copyWith(
                                     color: _canSave
-                                        ? Colors.white
+                                        ? scheme.onPrimary
                                         : scheme.onSurfaceVariant,
                                     fontWeight: FontWeight.w700,
                                   ),

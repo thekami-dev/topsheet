@@ -4,11 +4,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/recall_store.dart';
-import '../main.dart' show applyThemeMode, themeModeNotifier;
 import '../services/install_source_service.dart';
 import '../services/rate_prompt_service.dart';
 import '../widgets/pressable.dart';
 import 'edit_profile_screen.dart';
+import 'themes_screen.dart';
 
 /* Hallmark · genre: dark-premium · macrostructure: Long Document
  * design-system: design.md · designed-as-app
@@ -169,47 +169,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _SettingsGroup(
             title: 'Appearance',
             children: [
-              ValueListenableBuilder<ThemeMode>(
-                valueListenable: themeModeNotifier,
-                builder: (context, mode, _) {
-                  final current = switch (mode) {
-                    ThemeMode.light => 'light',
-                    ThemeMode.dark => 'dark',
-                    ThemeMode.system => 'system',
-                  };
-                  return Column(
-                    children: [
-                      _ThemeOptionTile(
-                        label: 'System default',
-                        icon: Icons.brightness_auto_rounded,
-                        selected: current == 'system',
-                        onTap: () => applyThemeMode('system'),
-                      ),
-                      Divider(
-                        height: 1,
-                        indent: 16,
-                        endIndent: 16,
-                        color: scheme.outlineVariant,
-                      ),
-                      _ThemeOptionTile(
-                        label: 'Light',
-                        icon: Icons.light_mode_outlined,
-                        selected: current == 'light',
-                        onTap: () => applyThemeMode('light'),
-                      ),
-                      Divider(
-                        height: 1,
-                        indent: 16,
-                        endIndent: 16,
-                        color: scheme.outlineVariant,
-                      ),
-                      _ThemeOptionTile(
-                        label: 'Dark',
-                        icon: Icons.dark_mode_outlined,
-                        selected: current == 'dark',
-                        onTap: () => applyThemeMode('dark'),
-                      ),
-                    ],
+              _SettingsTile(
+                icon: const Icon(Icons.palette_outlined, size: 20),
+                title: 'Themes',
+                subtitle: 'Light, dark and colour themes',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ThemesScreen()),
                   );
                 },
               ),
