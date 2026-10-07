@@ -4,11 +4,11 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/recall_store.dart';
-import '../main.dart' show applyThemeMode, themeModeNotifier;
 import '../services/install_source_service.dart';
 import '../services/rate_prompt_service.dart';
 import '../widgets/pressable.dart';
 import 'edit_profile_screen.dart';
+import 'themes_screen.dart';
 
 /* Hallmark · genre: dark-premium · macrostructure: Long Document
  * design-system: design.md · designed-as-app
@@ -60,10 +60,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showAbout() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (context) {
         final scheme = Theme.of(context).colorScheme;
         final version = _packageInfo != null
@@ -148,7 +144,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 32 + MediaQuery.viewPaddingOf(context).bottom),
         children: [
           _SettingsGroup(
             title: 'Profile',
@@ -160,6 +156,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsGroup(
+            title: 'Appearance',
+            children: [
+              _SettingsTile(
+                icon: const Icon(Icons.palette_outlined, size: 20),
+                title: 'Themes',
+                subtitle: 'Light, dark and colour themes',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ThemesScreen()),
                   );
                 },
               ),
@@ -185,62 +197,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   }
                 },
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SettingsGroup(
-            title: 'Appearance',
-            children: [
-              ValueListenableBuilder<ThemeMode>(
-                valueListenable: themeModeNotifier,
-                builder: (context, mode, _) {
-                  final current = switch (mode) {
-                    ThemeMode.light => 'light',
-                    ThemeMode.dark => 'dark',
-                    ThemeMode.system => 'system',
-                  };
-                  return Column(
-                    children: [
-                      _ThemeOptionTile(
-                        label: 'System default',
-                        icon: Icons.brightness_auto_rounded,
-                        selected: current == 'system',
-                        onTap: () => applyThemeMode('system'),
-                      ),
-                      Divider(
-                        height: 1,
-                        indent: 16,
-                        endIndent: 16,
-                        color: scheme.outlineVariant,
-                      ),
-                      _ThemeOptionTile(
-                        label: 'Light',
-                        icon: Icons.light_mode_outlined,
-                        selected: current == 'light',
-                        onTap: () => applyThemeMode('light'),
-                      ),
-                      Divider(
-                        height: 1,
-                        indent: 16,
-                        endIndent: 16,
-                        color: scheme.outlineVariant,
-                      ),
-                      _ThemeOptionTile(
-                        label: 'Dark',
-                        icon: Icons.dark_mode_outlined,
-                        selected: current == 'dark',
-                        onTap: () => applyThemeMode('dark'),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SettingsGroup(
-            title: 'About',
-            children: [
               _SettingsTile(
                 icon: const Icon(Icons.info_outline_rounded, size: 20),
                 title: 'About Topsheet',
@@ -251,13 +207,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 20),
           _SettingsGroup(
-            title: 'Community',
+            title: 'Connect & Support',
             children: [
               _SettingsTile(
                 icon: FaIcon(
                   FontAwesomeIcons.discord,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Discord',
                 subtitle: 'Join the Thekami community',
@@ -265,18 +220,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _SettingsTile(
                 icon: FaIcon(
-                  FontAwesomeIcons.linkedinIn,
-                  size: 18,
-                  color: scheme.onSurfaceVariant,
-                ),
-                title: 'LinkedIn',
-                onTap: () => _launch(_kLinkedIn),
-              ),
-              _SettingsTile(
-                icon: FaIcon(
                   FontAwesomeIcons.instagram,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Instagram',
                 onTap: () => _launch(_kInstagram),
@@ -285,50 +230,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: FaIcon(
                   FontAwesomeIcons.facebook,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Facebook',
                 onTap: () => _launch(_kFacebook),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SettingsGroup(
-            title: 'Open Source',
-            children: [
+              _SettingsTile(
+                icon: FaIcon(
+                  FontAwesomeIcons.linkedinIn,
+                  size: 18,
+                ),
+                title: 'LinkedIn',
+                onTap: () => _launch(_kLinkedIn),
+              ),
               _SettingsTile(
                 icon: FaIcon(
                   FontAwesomeIcons.github,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
-                title: 'View source on GitHub',
-                subtitle: 'Topsheet is free and open source',
+                title: 'Topsheet on GitHub',
+                subtitle: 'Free and open source \u2014 view the code',
                 onTap: () => _launch(_kGithubRepo),
               ),
               _SettingsTile(
                 icon: FaIcon(
                   FontAwesomeIcons.github,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Thekami on GitHub',
                 onTap: () => _launch(_kGithubOrg),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          _SettingsGroup(
-            title: 'Support',
-            children: [
               _SettingsTile(
                 icon: Icon(
-                  _isPlayStore == false ? Icons.star_outline_rounded : Icons.star_rounded,
+                  _isPlayStore == false
+                      ? Icons.star_outline_rounded
+                      : Icons.star_rounded,
                   size: 20,
                 ),
                 title: _isPlayStore == false ? 'Star on GitHub' : 'Rate Topsheet',
                 subtitle: _isPlayStore == false
-                    ? 'Give the project a star — it helps a lot'
+                    ? 'Give the project a star \u2014 it helps a lot'
                     : 'Enjoying the app? Leave a rating',
                 onTap: () => RatePromptService.instance.requestRatingOrStar(),
               ),
@@ -378,37 +318,20 @@ class _SettingsGroup extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8, left: 2),
+          padding: const EdgeInsets.only(bottom: 10, left: 14),
           child: Text(
-            title.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.9,
-            ),
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: scheme.secondary),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
+        // Material (not Container) so InkWell ripples show on top of it.
+        Material(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(28),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                children[i],
-                if (i < children.length - 1)
-                  Divider(
-                    height: 1,
-                    indent: 16,
-                    endIndent: 16,
-                    color: scheme.outlineVariant,
-                  ),
-              ],
-            ],
-          ),
+          child: Column(children: children),
         ),
       ],
     );
@@ -436,11 +359,23 @@ class _SettingsTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            SizedBox(width: 20, child: Center(child: icon)),
-            const SizedBox(width: 14),
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: IconTheme(
+                data: IconThemeData(color: scheme.secondary, size: 20),
+                child: icon,
+              ),
+            ),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -466,53 +401,6 @@ class _SettingsTile extends StatelessWidget {
               size: 20,
               color: scheme.onSurfaceVariant,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ThemeOptionTile extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ThemeOptionTile({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (selected)
-              Icon(Icons.check_circle_rounded, size: 20, color: scheme.primary)
-            else
-              Icon(
-                Icons.circle_outlined,
-                size: 20,
-                color: scheme.onSurfaceVariant,
-              ),
           ],
         ),
       ),

@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../services/remote_data_service.dart';
+import '../models/institute.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
@@ -62,7 +64,8 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     if (widget.initialData != null) {
-      _restoreFrom(widget.initialData!);
+      // Older saved topsheets have no institute; fill it from the profile.
+      _restoreFrom(widget.initialData!).whenComplete(_applyProfileDefaults);
     } else {
       _restoreLastPicks().whenComplete(() {
         _restoreDraft().whenComplete(_applyProfileDefaults);
@@ -85,6 +88,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
 
   Map<String, dynamic> _draftJson() => {
     'deptCode': _data.department?.code,
+    'instituteName': _data.instituteName,
+    'instituteCode': _data.instituteCode,
+    'instituteAddress': _data.instituteAddress,
+    'instituteWebsite': _data.instituteWebsite,
     'subjectCode': _data.subject?.code,
     'semester': _data.semester,
     'exptNo': _exptNoCtrl.text,
@@ -141,6 +148,14 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       if (dept != null) _data.department = dept;
       if (subject != null) _data.subject = subject;
       _data.semester = draft['semester'] as String? ?? _data.semester;
+      _data.instituteName =
+          draft['instituteName'] as String? ?? _data.instituteName;
+      _data.instituteCode =
+          draft['instituteCode'] as String? ?? _data.instituteCode;
+      _data.instituteAddress =
+          draft['instituteAddress'] as String? ?? _data.instituteAddress;
+      _data.instituteWebsite =
+          draft['instituteWebsite'] as String? ?? _data.instituteWebsite;
       _exptNoCtrl.text = draft['exptNo'] as String? ?? '';
       _exptNameCtrl.text = draft['exptName'] as String? ?? '';
       _studentNameCtrl.text = draft['studentName'] as String? ?? '';
@@ -188,6 +203,13 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     final profile = await RecallStore.instance.loadProfile();
     if (profile == null || !mounted) return;
     setState(() {
+      // Draft/edit data wins; profile only fills an empty institute.
+      if (_data.instituteName.isEmpty) {
+        _data.instituteName = profile['instituteName'] as String? ?? '';
+        _data.instituteCode = profile['instituteCode'] as String? ?? '';
+        _data.instituteAddress = profile['instituteAddress'] as String? ?? '';
+        _data.instituteWebsite = profile['instituteWebsite'] as String? ?? '';
+      }
       if (_studentNameCtrl.text.trim().isEmpty) {
         _studentNameCtrl.text = profile['name'] as String? ?? '';
       }
@@ -206,6 +228,33 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
         }
       }
     });
+  }
+
+  Future<void> _pickInstitute() async {
+    final raw = await RemoteDataService.instance.fetchInstitutes();
+    if (!mounted) return;
+    if (raw == null || raw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't load institutes")),
+      );
+      return;
+    }
+    final result = await showSearchablePicker<Institute>(
+      context: context,
+      title: 'Select Institute',
+      items: raw.map(Institute.fromJson).toList(),
+      labelOf: (i) => i.name,
+      subtitleOf: (i) => i.code == null ? '' : 'Code ${i.code}',
+    );
+    if (result != null) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _data.instituteName = result.name;
+        _data.instituteCode = result.code ?? '';
+        _data.instituteAddress = result.address ?? '';
+        _data.instituteWebsite = result.website ?? '';
+      });
+    }
   }
 
   Future<void> _pickDepartment() async {
@@ -514,10 +563,8 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       body: Stack(
         children: [
           const _AtmosphereBackground(),
-          SafeArea(
-            child: ListView(
-              controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(16, 74, 16, 48),
+          SafeArea(bottom: false, child: ListView(controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(16, 74, 16, 48 + MediaQuery.viewPaddingOf(context).bottom),
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),
@@ -568,6 +615,14 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
                   title: 'Course',
                   icon: Icons.menu_book_rounded,
                   children: [
+                    _PickerField(
+                      label: 'Institute',
+                      value: _data.instituteName.isEmpty
+                          ? null
+                          : _data.instituteName,
+                      onTap: _pickInstitute,
+                    ),
+                    const SizedBox(height: 12),
                     _PickerField(
                       label: 'Department',
                       value: _data.department == null
@@ -821,23 +876,23 @@ class _GenerateFabState extends State<_GenerateFab>
       _FabState.done => 'Saved',
     };
     final icon = switch (widget.state) {
-      _FabState.idle => const Icon(
+      _FabState.idle => Icon(
         Icons.picture_as_pdf_rounded,
         key: ValueKey('idle'),
         size: 17,
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.onPrimary,
       ),
-      _FabState.generating => const SizedBox(
+      _FabState.generating => SizedBox(
         key: ValueKey('spin'),
         width: 15,
         height: 15,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary),
       ),
-      _FabState.done => const Icon(
+      _FabState.done => Icon(
         Icons.check_rounded,
         key: ValueKey('done'),
         size: 17,
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.onPrimary,
       ),
     };
     return AnimatedBuilder(
@@ -883,7 +938,7 @@ class _GenerateFabState extends State<_GenerateFab>
                   label,
                   key: ValueKey(label),
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1249,18 +1304,22 @@ class _PdfResultPage extends StatelessWidget {
               canChangePageFormat: false,
               canDebug: false,
               useActions: false,
-              scrollViewDecoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-              ),
+              previewPageMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+              maxPageWidth: 680,
+              scrollViewDecoration: BoxDecoration(color: scheme.surface),
               pdfPreviewPageDecoration: BoxDecoration(
                 color: Colors.white,
+                borderRadius: BorderRadius.circular(3),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.2),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
+                    color: Colors.black.withValues(alpha: 0.28),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
                   ),
                 ],
+              ),
+              loadingWidget: Center(
+                child: CircularProgressIndicator(color: scheme.primary),
               ),
               allowSharing: false,
               allowPrinting: false,
@@ -1321,12 +1380,12 @@ class _PdfResultPage extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.share_rounded, size: 19, color: Colors.white),
+                              Icon(Icons.share_rounded, size: 19, color: Theme.of(context).colorScheme.onPrimary),
                               const SizedBox(width: 8),
                               Text(
                                 'Share',
                                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  color: Colors.white,
+                                  color: Theme.of(context).colorScheme.onPrimary,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
