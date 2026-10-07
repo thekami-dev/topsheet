@@ -72,17 +72,28 @@ class _ThemesScreenState extends State<ThemesScreen> {
       body: DynamicColorBuilder(
         builder: (lightDyn, darkDyn) {
           final dyn = isDark ? darkDyn : lightDyn;
-          return ValueListenableBuilder<String>(
-            valueListenable: themePaletteNotifier,
-            builder: (context, current, _) {
+          return ListenableBuilder(
+            listenable: Listenable.merge([
+              themePaletteNotifier,
+              themePureBlackNotifier,
+            ]),
+            builder: (context, _) {
+              final current = themePaletteNotifier.value;
+              final black = themePureBlackNotifier.value;
+              PaletteColors tone(PaletteColors c) =>
+                  isDark && black ? pureBlackOf(c) : c;
               final entries = <_Entry>[
                 for (final p in kPalettes)
-                  _Entry(p.id, p.name, isDark ? p.dark : p.light),
+                  _Entry(p.id, p.name, tone(isDark ? p.dark : p.light)),
               ];
               if (dyn != null) {
                 entries.insert(
                   1,
-                  _Entry(dynamicPaletteId, 'Dynamic', paletteFromScheme(dyn)),
+                  _Entry(
+                    dynamicPaletteId,
+                    'Dynamic',
+                    tone(paletteFromScheme(dyn)),
+                  ),
                 );
               }
               return ListView(
@@ -134,6 +145,39 @@ class _ThemesScreenState extends State<ThemesScreen> {
                           ),
                         );
                       },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Pure black dark mode',
+                                style: textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'True black background in dark mode. '
+                                'Saves battery on AMOLED screens.',
+                                style: textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: black,
+                          onChanged: (v) {
+                            HapticFeedback.selectionClick();
+                            applyThemePureBlack(v);
+                          },
+                        ),
+                      ],
                     ),
                   ),
                   Padding(

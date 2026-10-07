@@ -257,7 +257,7 @@ PaletteColors paletteFromScheme(ColorScheme s) => PaletteColors(
   onAccent: s.onPrimary,
 );
 
-PaletteColors resolvePalette(
+PaletteColors _resolveBase(
   String id,
   bool isDark, {
   ColorScheme? dynamicScheme,
@@ -286,4 +286,44 @@ Future<void> applyThemePalette(String id) async {
   themePaletteNotifier.value = id;
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(_kPaletteKey, id);
+}
+
+/// True-black variant of [c] for AMOLED screens (dark mode only).
+PaletteColors pureBlackOf(PaletteColors c) => PaletteColors(
+  bg: const Color(0xFF000000),
+  surface: Color.lerp(const Color(0xFF000000), c.surface, 0.55)!,
+  surface2: Color.lerp(const Color(0xFF000000), c.surface2, 0.7)!,
+  border: c.border,
+  text: c.text,
+  text2: c.text2,
+  accent: c.accent,
+  accent2: c.accent2,
+  success: c.success,
+  error: c.error,
+  onAccent: c.onAccent,
+);
+
+PaletteColors resolvePalette(
+  String id,
+  bool isDark, {
+  ColorScheme? dynamicScheme,
+  bool pureBlack = false,
+}) {
+  final c = _resolveBase(id, isDark, dynamicScheme: dynamicScheme);
+  return isDark && pureBlack ? pureBlackOf(c) : c;
+}
+
+final themePureBlackNotifier = ValueNotifier<bool>(false);
+
+const _kPureBlackKey = 'themePureBlack';
+
+Future<void> loadThemePureBlack() async {
+  final prefs = await SharedPreferences.getInstance();
+  themePureBlackNotifier.value = prefs.getBool(_kPureBlackKey) ?? false;
+}
+
+Future<void> applyThemePureBlack(bool value) async {
+  themePureBlackNotifier.value = value;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(_kPureBlackKey, value);
 }

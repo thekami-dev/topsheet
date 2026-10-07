@@ -35,6 +35,7 @@ void main() async {
     systemNavigationBarDividerColor: Colors.transparent,
   ));
   await loadThemePalette();
+  await loadThemePureBlack();
   final saved = await RecallStore.instance.themeMode();
   themeModeNotifier.value = switch (saved) {
     'light' => ThemeMode.light,
@@ -86,6 +87,11 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
       (isDark ? const ColorScheme.dark() : const ColorScheme.light()).copyWith(
         surface: c,
         onSurface: text,
+        surfaceTint: Colors.transparent,
+        surfaceContainerLowest: c,
+        surfaceContainerLow: surface,
+        surfaceContainer: surface,
+        surfaceContainerHigh: surface2,
         surfaceContainerHighest: surface2,
         onSurfaceVariant: text2,
         outline: border,
@@ -95,6 +101,11 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
         primaryContainer: surface2,
         onPrimaryContainer: text,
         secondary: p.accent2,
+        secondaryContainer: Color.alphaBlend(
+          accent.withValues(alpha: 0.22),
+          surface2,
+        ),
+        onSecondaryContainer: text,
         tertiary: p.success,
         error: error,
         onError: Colors.white,
@@ -103,45 +114,35 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
         onInverseSurface: text,
       );
 
+  // No fontFamily: uses the system font (Roboto on Android).
   final baseTextTheme =
       (isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme)
-          .apply(fontFamily: 'Inter', bodyColor: text, displayColor: text);
+          .apply(bodyColor: text, displayColor: text);
 
   final textTheme = baseTextTheme.copyWith(
     displaySmall: baseTextTheme.displaySmall?.copyWith(
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.6,
-      height: 1.06,
+      fontWeight: FontWeight.w600,
     ),
     headlineSmall: baseTextTheme.headlineSmall?.copyWith(
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.45,
-      height: 1.1,
+      fontWeight: FontWeight.w600,
     ),
-    titleLarge: baseTextTheme.titleLarge?.copyWith(
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.22,
-      height: 1.15,
-    ),
+    titleLarge: baseTextTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
     titleMedium: baseTextTheme.titleMedium?.copyWith(
       fontWeight: FontWeight.w600,
-      letterSpacing: -0.1,
     ),
-    bodyLarge: baseTextTheme.bodyLarge?.copyWith(letterSpacing: 0, height: 1.42),
-    bodyMedium: baseTextTheme.bodyMedium?.copyWith(
-      letterSpacing: 0.05,
-      height: 1.38,
-      color: text2,
-    ),
-    labelLarge: baseTextTheme.labelLarge?.copyWith(
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.08,
-    ),
+    bodyMedium: baseTextTheme.bodyMedium?.copyWith(color: text2),
+    labelLarge: baseTextTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
     labelSmall: baseTextTheme.labelSmall?.copyWith(
       fontWeight: FontWeight.w600,
-      letterSpacing: 0.34,
+      letterSpacing: 0.8,
       color: text2,
     ),
+  );
+
+  const stadium = StadiumBorder();
+  OutlineInputBorder field(BorderSide side) => OutlineInputBorder(
+    borderRadius: BorderRadius.circular(16),
+    borderSide: side,
   );
 
   return ThemeData(
@@ -164,10 +165,7 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
       elevation: 0,
       color: surface,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: border),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     ),
     listTileTheme: ListTileThemeData(
       iconColor: text2,
@@ -176,37 +174,70 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
         fontWeight: FontWeight.w600,
       ),
       subtitleTextStyle: textTheme.bodySmall?.copyWith(color: text2),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: surface2,
       floatingLabelBehavior: FloatingLabelBehavior.never,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       hintStyle: textTheme.bodyMedium?.copyWith(color: text2),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: border),
+      border: field(BorderSide.none),
+      enabledBorder: field(BorderSide.none),
+      disabledBorder: field(BorderSide.none),
+      focusedBorder: field(BorderSide(color: accent, width: 2)),
+      errorBorder: field(BorderSide(color: error, width: 1.5)),
+      focusedErrorBorder: field(BorderSide(color: error, width: 2)),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: accent,
+        foregroundColor: p.onAccent,
+        minimumSize: const Size(64, 52),
+        shape: stadium,
+        textStyle: textTheme.labelLarge,
       ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: border),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: text,
+        side: BorderSide(color: border),
+        minimumSize: const Size(64, 52),
+        shape: stadium,
+        textStyle: textTheme.labelLarge,
       ),
-      disabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: border.withValues(alpha: 0.6)),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: p.accent2,
+        shape: stadium,
+        textStyle: textTheme.labelLarge,
       ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: accent, width: 1.6),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStateProperty.resolveWith<Color?>(
+          (st) => st.contains(WidgetState.selected)
+              ? accent.withValues(alpha: 0.18)
+              : Colors.transparent,
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith<Color?>(
+          (st) => st.contains(WidgetState.selected) ? p.accent2 : text2,
+        ),
+        side: WidgetStatePropertyAll(BorderSide(color: border)),
       ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: error, width: 1.2),
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith<Color?>(
+        (st) => st.contains(WidgetState.selected) ? p.onAccent : text2,
       ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: error, width: 1.6),
+      trackColor: WidgetStateProperty.resolveWith<Color?>(
+        (st) => st.contains(WidgetState.selected) ? accent : surface2,
+      ),
+      trackOutlineColor: WidgetStateProperty.resolveWith<Color?>(
+        (st) => st.contains(WidgetState.selected)
+            ? Colors.transparent
+            : border,
       ),
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
@@ -215,24 +246,27 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
       backgroundColor: accent,
       foregroundColor: p.onAccent,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(14)),
+        borderRadius: BorderRadius.all(Radius.circular(18)),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: surface2,
       contentTextStyle: textTheme.bodyMedium?.copyWith(color: text),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: border),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
       showDragHandle: true,
-      dragHandleColor: border,
+      dragHandleColor: text2.withValues(alpha: 0.4),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
     ),
     splashFactory: InkSparkle.splashFactory,
@@ -253,9 +287,14 @@ class TopsheetApp extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeModeNotifier,
       builder: (context, mode, _) {
-        return ValueListenableBuilder<String>(
-          valueListenable: themePaletteNotifier,
-          builder: (context, paletteId, _) {
+        return ListenableBuilder(
+          listenable: Listenable.merge([
+            themePaletteNotifier,
+            themePureBlackNotifier,
+          ]),
+          builder: (context, _) {
+            final paletteId = themePaletteNotifier.value;
+            final pureBlack = themePureBlackNotifier.value;
             return DynamicColorBuilder(
               builder: (lightDynamic, darkDynamic) {
                 return MaterialApp(
@@ -276,6 +315,7 @@ class TopsheetApp extends StatelessWidget {
                       paletteId,
                       true,
                       dynamicScheme: darkDynamic,
+                      pureBlack: pureBlack,
                     ),
                   ),
                   builder: (context, child) {
