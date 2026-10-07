@@ -343,7 +343,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   height: 56,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(28),
                     border: Border.all(color: scheme.outlineVariant),
                   ),
                   child: Icon(Icons.arrow_back_rounded, color: scheme.onSurface),
@@ -365,7 +365,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   color: enabled
                       ? scheme.primary
                       : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(28),
                 ),
                 child: _saving
                     ? SizedBox(
@@ -654,7 +654,7 @@ class _OptionCard extends StatelessWidget {
           color: selected
               ? scheme.primary.withValues(alpha: 0.10)
               : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: selected ? scheme.primary : scheme.outlineVariant,
             width: selected ? 1.5 : 1,

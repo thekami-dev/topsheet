@@ -60,10 +60,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showAbout() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (context) {
         final scheme = Theme.of(context).colorScheme;
         final version = _packageInfo != null
@@ -217,7 +213,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: FaIcon(
                   FontAwesomeIcons.discord,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Discord',
                 subtitle: 'Join the Thekami community',
@@ -227,7 +222,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: FaIcon(
                   FontAwesomeIcons.instagram,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Instagram',
                 onTap: () => _launch(_kInstagram),
@@ -236,7 +230,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: FaIcon(
                   FontAwesomeIcons.facebook,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Facebook',
                 onTap: () => _launch(_kFacebook),
@@ -245,7 +238,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: FaIcon(
                   FontAwesomeIcons.linkedinIn,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'LinkedIn',
                 onTap: () => _launch(_kLinkedIn),
@@ -254,7 +246,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: FaIcon(
                   FontAwesomeIcons.github,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Topsheet on GitHub',
                 subtitle: 'Free and open source \u2014 view the code',
@@ -264,7 +255,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: FaIcon(
                   FontAwesomeIcons.github,
                   size: 18,
-                  color: scheme.onSurfaceVariant,
                 ),
                 title: 'Thekami on GitHub',
                 onTap: () => _launch(_kGithubOrg),
@@ -328,37 +318,20 @@ class _SettingsGroup extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8, left: 2),
+          padding: const EdgeInsets.only(bottom: 10, left: 14),
           child: Text(
-            title.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.9,
-            ),
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(color: scheme.secondary),
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
+        // Material (not Container) so InkWell ripples show on top of it.
+        Material(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(28),
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                children[i],
-                if (i < children.length - 1)
-                  Divider(
-                    height: 1,
-                    indent: 16,
-                    endIndent: 16,
-                    color: scheme.outlineVariant,
-                  ),
-              ],
-            ],
-          ),
+          child: Column(children: children),
         ),
       ],
     );
@@ -386,11 +359,23 @@ class _SettingsTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
-            SizedBox(width: 20, child: Center(child: icon)),
-            const SizedBox(width: 14),
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: IconTheme(
+                data: IconThemeData(color: scheme.secondary, size: 20),
+                child: icon,
+              ),
+            ),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -416,53 +401,6 @@ class _SettingsTile extends StatelessWidget {
               size: 20,
               color: scheme.onSurfaceVariant,
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ThemeOptionTile extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ThemeOptionTile({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (selected)
-              Icon(Icons.check_circle_rounded, size: 20, color: scheme.primary)
-            else
-              Icon(
-                Icons.circle_outlined,
-                size: 20,
-                color: scheme.onSurfaceVariant,
-              ),
           ],
         ),
       ),

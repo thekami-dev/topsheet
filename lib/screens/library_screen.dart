@@ -158,8 +158,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       width: menuWidth,
                       decoration: BoxDecoration(
                         color: scheme.surfaceContainerHighest.withValues(alpha: 0.94),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: scheme.outlineVariant),
+                        borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.35),
@@ -276,9 +275,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(23),
-                    border: Border.all(
-                      color: scheme.outlineVariant.withValues(alpha: 0.7),
-                    ),
                   ),
                   child: Row(
                     children: [
@@ -366,21 +362,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
               children: [
                 for (final month in grouped.keys) ...[
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8, top: 12, left: 2),
+                    padding: const EdgeInsets.only(bottom: 10, top: 12, left: 14),
                     child: Text(
-                      month.toUpperCase(),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.9,
-                      ),
+                      month,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(color: scheme.secondary),
                     ),
                   ),
                   Container(
                     decoration: BoxDecoration(
                       color: scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: scheme.outlineVariant),
+                      borderRadius: BorderRadius.circular(28),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Column(
@@ -401,7 +392,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           if (entry != grouped[month]!.last)
                             Divider(
                               height: 1,
-                              indent: 16,
+                              indent: 72,
                               endIndent: 16,
                               color: scheme.outlineVariant,
                             ),
@@ -452,7 +443,7 @@ class _FileRow extends StatelessWidget {
       onTap: () => onTap(lastTapPosition),
       onLongPressStart: (d) => onLongPress(d.globalPosition),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
             Container(
@@ -460,14 +451,13 @@ class _FileRow extends StatelessWidget {
               height: 40,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: scheme.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: scheme.outlineVariant),
+                color: scheme.primary.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 Icons.picture_as_pdf_rounded,
                 size: 20,
-                color: scheme.primary,
+                color: scheme.secondary,
               ),
             ),
             const SizedBox(width: 12),
