@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/app_themes.dart';
+import '../core/motion.dart';
 import '../main.dart' show themeModeNotifier, applyThemeMode;
 import '../widgets/pressable.dart';
 
@@ -13,52 +14,17 @@ class _Entry {
   const _Entry(this.id, this.name, this.colors);
 }
 
-class _NoGlow extends ScrollBehavior {
-  const _NoGlow();
-
-  @override
-  Widget buildOverscrollIndicator(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) => child;
+void _setMode(ThemeMode m) {
+  HapticFeedback.selectionClick();
+  applyThemeMode(switch (m) {
+    ThemeMode.light => 'light',
+    ThemeMode.dark => 'dark',
+    ThemeMode.system => 'system',
+  });
 }
 
-class ThemesScreen extends StatefulWidget {
+class ThemesScreen extends StatelessWidget {
   const ThemesScreen({super.key});
-
-  @override
-  State<ThemesScreen> createState() => _ThemesScreenState();
-}
-
-class _ThemesScreenState extends State<ThemesScreen> {
-  static const _cardW = 128.0;
-  static const _gap = 14.0;
-  late final ScrollController _scroll;
-
-  @override
-  void initState() {
-    super.initState();
-    final idx = kPalettes.indexWhere((p) => p.id == themePaletteNotifier.value);
-    _scroll = ScrollController(
-      initialScrollOffset: idx <= 0 ? 0 : idx * (_cardW + _gap),
-    );
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  void _setMode(ThemeMode m) {
-    HapticFeedback.selectionClick();
-    applyThemeMode(switch (m) {
-      ThemeMode.light => 'light',
-      ThemeMode.dark => 'dark',
-      ThemeMode.system => 'system',
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -184,34 +150,13 @@ class _ThemesScreenState extends State<ThemesScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 28, 20, 14),
                     child: Text('COLOR THEME', style: textTheme.labelSmall),
                   ),
-                  SizedBox(
-                    height: 250,
-                    child: ScrollConfiguration(
-                      behavior: const _NoGlow(),
-                      child: ListView.separated(
-                        controller: _scroll,
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        itemCount: entries.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(width: _gap),
-                        itemBuilder: (context, i) {
-                          final e = entries[i];
-                          return _ThemeCard(
-                            entry: e,
-                            selected: e.id == current,
-                            onTap: () {
-                              HapticFeedback.selectionClick();
-                              applyThemePalette(e.id);
-                            },
-                          );
-                        },
-                      ),
-                    ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: _ThemeGrid(entries: entries, current: current),
                   ),
                   if (dyn != null)
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                       child: Text(
                         'Dynamic uses the colours of your wallpaper.',
                         style: textTheme.bodySmall?.copyWith(
@@ -229,13 +174,58 @@ class _ThemesScreenState extends State<ThemesScreen> {
   }
 }
 
-/// Mini phone mock-up that previews one palette.
-class _ThemeCard extends StatelessWidget {
+/// Responsive grid of compact swatches (3 columns on a typical phone).
+class _ThemeGrid extends StatelessWidget {
+  static const _gap = 10.0;
+  static const _minTileW = 96.0;
+  static const _tileH = 80.0;
+
+  final List<_Entry> entries;
+  final String current;
+
+  const _ThemeGrid({required this.entries, required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, box) {
+        final cols = ((box.maxWidth + _gap) / (_minTileW + _gap))
+            .floor()
+            .clamp(2, 6)
+            .toInt();
+        final tileW = (box.maxWidth - _gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: _gap,
+          runSpacing: _gap,
+          children: [
+            for (final e in entries)
+              SizedBox(
+                width: tileW,
+                height: _tileH,
+                child: _ThemeSwatch(
+                  entry: e,
+                  selected: e.id == current,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    applyThemePalette(e.id);
+                  },
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// One compact swatch: the palette's own background, a pill with its key
+/// colours, and its name. Selected = accent ring + small check.
+class _ThemeSwatch extends StatelessWidget {
   final _Entry entry;
   final bool selected;
   final VoidCallback onTap;
 
-  const _ThemeCard({
+  const _ThemeSwatch({
     required this.entry,
     required this.selected,
     required this.onTap,
@@ -244,136 +234,109 @@ class _ThemeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = entry.colors;
-    final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    return Pressable(
+    final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final dur = reduced ? Duration.zero : Motion.standard;
+
+    Widget dot(Color color) => Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: entry.name,
+      excludeSemantics: true,
       onTap: onTap,
-      pressedScale: 0.97,
-      child: SizedBox(
-        width: 128,
-        child: Column(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              height: 196,
-              decoration: BoxDecoration(
-                color: c.bg,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: selected ? c.accent : c.border,
-                  width: selected ? 2.5 : 1.5,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(17),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: c.text,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          const Spacer(),
-                          if (selected)
-                            Container(
-                              width: 18,
-                              height: 18,
-                              decoration: BoxDecoration(
-                                color: c.accent,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.check_rounded,
-                                size: 12,
-                                color: c.onAccent,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 14, 12, 0),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: 64,
-                          height: 84,
-                          padding: const EdgeInsets.all(8),
-                          alignment: Alignment.topLeft,
-                          decoration: BoxDecoration(
-                            color: c.surface2,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(5),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ColoredBox(
-                                  color: c.accent,
-                                  child: const SizedBox(width: 14, height: 10),
-                                ),
-                                ColoredBox(
-                                  color: c.accent2,
-                                  child: const SizedBox(width: 14, height: 10),
-                                ),
-                              ],
-                            ),
-                          ),
+      child: Pressable(
+        onTap: onTap,
+        pressedScale: 0.97,
+        child: AnimatedContainer(
+          duration: dur,
+          curve: Motion.standardCurve,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: selected ? c.accent : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: c.bg,
+              borderRadius: BorderRadius.circular(17),
+              border: Border.all(color: c.border),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.surface2,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            dot(c.accent),
+                            const SizedBox(width: 4),
+                            dot(c.accent2),
+                            const SizedBox(width: 4),
+                            dot(c.success),
+                          ],
                         ),
                       ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      height: 38,
-                      color: c.surface,
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 16,
-                            height: 16,
+                      const Spacer(),
+                      AnimatedScale(
+                        scale: selected ? 1 : 0.6,
+                        duration: dur,
+                        curve: Motion.standardCurve,
+                        child: AnimatedOpacity(
+                          opacity: selected ? 1 : 0,
+                          duration: dur,
+                          child: Container(
+                            width: 18,
+                            height: 18,
                             decoration: BoxDecoration(
                               color: c.accent,
                               shape: BoxShape.circle,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Container(
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: c.text2,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
+                            child: Icon(
+                              Icons.check_rounded,
+                              size: 12,
+                              color: c.onAccent,
                             ),
                           ),
-                        ],
+                        ),
                       ),
+                    ],
+                  ),
+                  Text(
+                    entry.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.labelLarge?.copyWith(
+                      color: c.text,
+                      fontSize: 12.5,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 10),
-            Text(
-              entry.name,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: textTheme.bodyMedium?.copyWith(
-                color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

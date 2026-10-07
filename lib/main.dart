@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import 'core/app_themes.dart';
+import 'core/motion.dart';
 import 'data/recall_store.dart';
 import 'screens/library_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -13,7 +14,7 @@ import 'screens/onboarding_screen.dart';
  */
 
 /// Global, app-wide theme mode. SettingsScreen updates this; MaterialApp
-/// listens via themeModeNotifier and rebuilds instantly.
+/// listens via themeModeNotifier and cross-fades to the new theme.
 final themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
 
 Future<void> applyThemeMode(String mode) async {
@@ -279,6 +280,23 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
   );
 }
 
+/// How long a palette / light-dark change takes to morph across the app.
+///
+/// Follows the motion system: the OS "reduce motion" flag switches the
+/// morph off entirely, and sustained jank (weak device) shortens it to a
+/// quick cross-fade.
+Duration _themeMorphDuration() {
+  final osReduced = WidgetsBinding
+      .instance
+      .platformDispatcher
+      .accessibilityFeatures
+      .disableAnimations;
+  if (osReduced) return Duration.zero;
+  return PerformanceMonitor.instance.tier.value == MotionTier.reduced
+      ? Motion.fast
+      : Motion.slow;
+}
+
 class TopsheetApp extends StatelessWidget {
   const TopsheetApp({super.key});
 
@@ -295,12 +313,17 @@ class TopsheetApp extends StatelessWidget {
           builder: (context, _) {
             final paletteId = themePaletteNotifier.value;
             final pureBlack = themePureBlackNotifier.value;
+            final morph = _themeMorphDuration();
             return DynamicColorBuilder(
               builder: (lightDynamic, darkDynamic) {
                 return MaterialApp(
                   title: 'Topsheet',
                   debugShowCheckedModeBanner: false,
                   themeMode: mode,
+                  // MaterialApp wraps the whole app in an AnimatedTheme, so
+                  // every screen, dialog and sheet morphs together.
+                  themeAnimationDuration: morph,
+                  themeAnimationCurve: Motion.standardCurve,
                   theme: _buildTheme(
                     isDark: false,
                     p: resolvePalette(
