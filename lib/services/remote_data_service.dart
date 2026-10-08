@@ -18,7 +18,7 @@ class RemoteDataService {
   RemoteDataService._();
   static final RemoteDataService instance = RemoteDataService._();
 
-  static const _baseUrl = 'https://topsheet-data.vercel.app/data'\;
+  static const _baseUrl = 'https://topsheet-data.vercel.app/data';
   static const _timeout = Duration(seconds: 8);
   static const _maxAge = Duration(hours: 6);
 
