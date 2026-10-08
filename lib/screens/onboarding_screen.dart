@@ -1138,3 +1138,69 @@ class _SemesterStep extends StatelessWidget {
     );
   }
 }
+
+/// Placeholder rows shown while the institute list loads.
+class _InstituteSkeleton extends StatefulWidget {
+  const _InstituteSkeleton();
+
+  @override
+  State<_InstituteSkeleton> createState() => _InstituteSkeletonState();
+}
+
+class _InstituteSkeletonState extends State<_InstituteSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_motion(context, Motion.slow) == Duration.zero) {
+      _c.stop();
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      label: 'Loading institutes',
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final t = Curves.easeInOut.transform(_c.value);
+          return Opacity(
+            opacity: 0.55 + 0.45 * t,
+            child: ListView(
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                for (var i = 0; i < 6; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: scheme.outlineVariant),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}

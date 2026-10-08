@@ -10,41 +10,48 @@ class Department {
   });
 }
 
-// BTEB Regulation 2022 technology/department codes.
-// ponytail: sourced from a secondary aggregator (btebresultszone.com), not
-// BTEB's own PDF directly — cross-check against bteb.gov.bd before relying
-// on this for official submissions.
-const List<Department> btebDepartments = [
-  Department(shortName: 'ARCH', longName: 'Architecture Technology', code: 61),
-  Department(shortName: 'AUTO', longName: 'Automobile Technology', code: 62),
-  Department(shortName: 'CHEM', longName: 'Chemical Technology', code: 63),
-  Department(shortName: 'CIVIL', longName: 'Civil Technology', code: 64),
-  Department(shortName: 'CIVIL(W)', longName: 'Civil (Wood) Technology', code: 65),
-  Department(shortName: 'EEE', longName: 'Electrical Technology', code: 67),
-  Department(shortName: 'ETE', longName: 'Electronics Technology', code: 68),
-  Department(shortName: 'FOOD', longName: 'Food Technology', code: 69),
-  Department(shortName: 'MECH', longName: 'Mechanical Technology', code: 70),
-  Department(shortName: 'POWER', longName: 'Power Technology', code: 71),
-  Department(shortName: 'RAC', longName: 'Refrigeration & Air Conditioning Technology', code: 72),
-  Department(shortName: 'SURV', longName: 'Surveying Technology', code: 78),
-  Department(shortName: 'AERO', longName: 'Aerospace Technology', code: 82),
-  Department(shortName: 'AVIO', longName: 'Avionics Technology', code: 83),
-  Department(shortName: 'CST', longName: 'Computer Science & Technology', code: 85),
-  Department(shortName: 'EMED', longName: 'Electromedical Technology', code: 86),
-  Department(shortName: 'CONST', longName: 'Construction Technology', code: 88),
-  Department(shortName: 'ENV', longName: 'Environmental Technology', code: 90),
-  Department(shortName: 'MECHATRONICS', longName: 'Mechatronics Technology', code: 92),
-  Department(shortName: 'PETRO', longName: 'Petroleum & Mining Technology', code: 93),
-  Department(shortName: 'TELE', longName: 'Telecommunication Technology', code: 94),
-  Department(shortName: 'PRINT', longName: 'Printing Technology', code: 95),
-  Department(shortName: 'GRAPHIC', longName: 'Graphic Design Technology', code: 96),
-  Department(shortName: 'FOOTWEAR', longName: 'Footwear Technology', code: 98),
-  Department(shortName: 'TOURISM', longName: 'Tourism & Hospitality Technology', code: 99),
-];
+/// Letters/digits/spaces only, lower-case — so "Civil Technology" sorts
+/// before "Civil (Wood) Technology" and punctuation never decides the order.
+String sortKey(String s) =>
+    s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
 
-final Map<int, Department> _departmentsByCode = {
-  for (final d in btebDepartments) d.code: d,
-};
+int compareDepartments(Department a, Department b) =>
+    sortKey(a.longName).compareTo(sortKey(b.longName));
+
+/// In-memory department list. It is filled from the cloud
+/// (`departments.json`, cached on the device) by RemoteDataService — nothing
+/// is hard-coded in the app.
+class DepartmentRegistry {
+  DepartmentRegistry._();
+
+  static List<Department> _sorted = const [];
+  static Map<int, Department> _byCode = const {};
+
+  static bool get isLoaded => _sorted.isNotEmpty;
+
+  static void set(Iterable<Department> departments) {
+    final list = departments.toList()..sort(compareDepartments);
+    _sorted = List<Department>.unmodifiable(list);
+    _byCode = {for (final d in list) d.code: d};
+  }
+}
+
+/// Every department, A-Z by full name. Empty until the data has loaded.
+List<Department> get btebDepartments => DepartmentRegistry._sorted;
 
 /// O(1) code → department lookup (draft/pick restoration).
-Department? departmentByCode(int code) => _departmentsByCode[code];
+Department? departmentByCode(int code) => DepartmentRegistry._byCode[code];
+
+/// Department codes ordered A-Z by full name; unknown codes go last.
+List<int> sortedDepartmentCodes(Iterable<int> codes) {
+  final list = codes.toList();
+  list.sort((a, b) {
+    final da = departmentByCode(a);
+    final db = departmentByCode(b);
+    if (da == null && db == null) return a.compareTo(b);
+    if (da == null) return 1;
+    if (db == null) return -1;
+    return compareDepartments(da, db);
+  });
+  return list;
+}

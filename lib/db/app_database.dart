@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-import '../data/subject_seed.dart';
 import '../services/remote_data_service.dart';
 
 class Subject {
@@ -27,6 +26,8 @@ class Subject {
       );
 }
 
+/// Local copy of the subjects downloaded from the cloud
+/// (`subjects/<deptCode>.json`). Nothing is hard-coded in the app.
 class AppDatabase {
   AppDatabase._();
   static final AppDatabase instance = AppDatabase._();
@@ -56,42 +57,22 @@ class AppDatabase {
     )
   ''');
 
-  Future<void> _seedSubjects(Database db) async {
-    final batch = db.batch();
-    for (final s in seedSubjects) {
-      batch.insert(
-        'subjects',
-        {
-          'code': s.code,
-          'name': s.name,
-          'deptCode': s.deptCode,
-          'semester': s.semester,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    await batch.commit(noResult: true);
-  }
-
   Future<Database> _open() async {
     final path = join(await getDatabasesPath(), 'topsheet.db');
     return openDatabase(
       path,
-      // v3: primary key is now (deptCode, code). Many subject codes (e.g.
+      // v3: primary key is (deptCode, code). Many subject codes (e.g.
       // Bangla-I) are shared by every department, so the old key (code
       // alone) let one department's row overwrite another's.
       version: 3,
-      onCreate: (db, version) async {
-        await _createSubjectsTable(db);
-        await _seedSubjects(db);
-      },
+      onCreate: (db, version) => _createSubjectsTable(db),
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 3) {
-          // The table only holds seed + cloud data, so rebuilding it is safe.
+          // The table only holds cloud data, which is downloaded again on
+          // demand, so rebuilding it is safe.
           await db.execute('DROP TABLE IF EXISTS subjects');
           await _createSubjectsTable(db);
         }
-        await _seedSubjects(db);
       },
     );
   }
@@ -119,7 +100,7 @@ class AppDatabase {
   }
 
   /// Downloads `subjects/<deptCode>.json` and upserts it into the local DB.
-  /// Returns true if rows were stored. Seed rows are never deleted.
+  /// Returns true if rows were stored.
   Future<bool> syncSubjects(
     int deptCode, {
     bool force = false,
