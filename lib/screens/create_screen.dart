@@ -1,11 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import '../services/remote_data_service.dart';
-import '../models/institute.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
@@ -16,8 +15,10 @@ import '../core/motion.dart';
 import '../data/departments.dart';
 import '../data/recall_store.dart';
 import '../db/app_database.dart';
+import '../models/institute.dart';
 import '../models/topsheet_data.dart';
 import '../pdf/topsheet_pdf.dart';
+import '../services/remote_data_service.dart';
 import '../widgets/pressable.dart';
 import '../widgets/recall_text_field.dart';
 import '../widgets/searchable_picker.dart';
@@ -26,7 +27,16 @@ import '../widgets/searchable_picker.dart';
  * design-system: design.md · designed-as-app
  */
 
-enum _FabState { idle, generating, done }
+/// Animation length that respects the OS reduce-motion flag and the app's
+/// own jank-based downgrade.
+Duration _motion(BuildContext context, Duration full) {
+  if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+    return Duration.zero;
+  }
+  return motionTierOf(context) == MotionTier.reduced ? Motion.fast : full;
+}
+
+enum _GenState { idle, generating, done }
 
 class CreateScreen extends StatefulWidget {
   final Map<String, dynamic>? initialData;
@@ -37,7 +47,28 @@ class CreateScreen extends StatefulWidget {
   State<CreateScreen> createState() => _CreateScreenState();
 }
 
-class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver {
+class _CreateScreenState extends State<CreateScreen>
+    with WidgetsBindingObserver {
+  static const _requiredCount = 14;
+
+  /// Error ids, in the order the fields appear on screen.
+  static const _fieldOrder = [
+    'department',
+    'semester',
+    'subject',
+    'exptNo',
+    'exptName',
+    'dateOfExpt',
+    'submissionDate',
+    'studentName',
+    'studentIndex',
+    'boardRoll',
+    'batch',
+    'teacherName',
+    'teacherRole',
+    'teacherDepartment',
+  ];
+
   final _data = TopsheetData();
   final _df = DateFormat('dd MMM yyyy');
 
@@ -51,11 +82,30 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   final _teacherRoleCtrl = TextEditingController();
   final _teacherDeptCtrl = TextEditingController();
 
-  final _scrollController = ScrollController();
+  late final Map<String, TextEditingController> _textFields = {
+    'exptNo': _exptNoCtrl,
+    'exptName': _exptNameCtrl,
+    'studentName': _studentNameCtrl,
+    'studentIndex': _studentIndexCtrl,
+    'boardRoll': _boardRollCtrl,
+    'batch': _batchCtrl,
+    'teacherName': _teacherNameCtrl,
+    'teacherRole': _teacherRoleCtrl,
+    'teacherDepartment': _teacherDeptCtrl,
+  };
 
-  _FabState _fabState = _FabState.idle;
-  int _fabShakeSignal = 0;
+  final _scrollController = ScrollController();
+  final Map<String, GlobalKey> _fieldKeys = {
+    for (final id in _fieldOrder) id: GlobalKey(),
+  };
+
+  _GenState _genState = _GenState.idle;
+  int _shakeSignal = 0;
   bool _showHint = false;
+  bool _loadingSubjects = false;
+  String? _subjectNote;
+  bool _subjectNoteRetry = false;
+  bool _bulkUpdate = false;
   final Map<String, String?> _errors = {};
   String? _lastSavedDraft;
 
@@ -63,6 +113,9 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    for (final c in _textFields.values) {
+      c.addListener(_onFieldChanged);
+    }
     if (widget.initialData != null) {
       // Older saved topsheets have no institute; fill it from the profile.
       _restoreFrom(widget.initialData!).whenComplete(_applyProfileDefaults);
@@ -84,6 +137,19 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
         state == AppLifecycleState.inactive) {
       _saveDraft();
     }
+  }
+
+  /// Rebuilds the progress counters while typing and clears an error as
+  /// soon as its field has a value.
+  void _onFieldChanged() {
+    if (!mounted || _bulkUpdate) return;
+    setState(() {
+      for (final e in _textFields.entries) {
+        if (_errors.containsKey(e.key) && e.value.text.trim().isNotEmpty) {
+          _errors.remove(e.key);
+        }
+      }
+    });
   }
 
   Map<String, dynamic> _draftJson() => {
@@ -125,28 +191,15 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
 
   /// Populates the form from a saved draft OR a recent topsheet's stored
   /// formData (edit flow) — same shape, same restore logic either way.
+  /// The subject is looked up in the background so the form never waits
+  /// for the network.
   Future<void> _restoreFrom(Map<String, dynamic> draft) async {
-    Department? dept;
     final deptCode = draft['deptCode'] as int?;
-    if (deptCode != null) dept = departmentByCode(deptCode);
-    Subject? subject;
-    if (dept != null) {
-      final subjectCode = draft['subjectCode'] as int?;
-      if (subjectCode != null) {
-        final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(dept.code);
-        for (final s in subjects) {
-          if (s.code == subjectCode) {
-            subject = s;
-            break;
-          }
-        }
-      }
-    }
-
+    final dept = deptCode == null ? null : departmentByCode(deptCode);
     if (!mounted) return;
+    _bulkUpdate = true;
     setState(() {
       if (dept != null) _data.department = dept;
-      if (subject != null) _data.subject = subject;
       _data.semester = draft['semester'] as String? ?? _data.semester;
       _data.instituteName =
           draft['instituteName'] as String? ?? _data.instituteName;
@@ -168,9 +221,36 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       final dateOfExpt = draft['dateOfExpt'] as String?;
       if (dateOfExpt != null) _data.dateOfExpt = DateTime.tryParse(dateOfExpt);
       final submissionDate = draft['submissionDate'] as String?;
-      if (submissionDate != null)
+      if (submissionDate != null) {
         _data.submissionDate = DateTime.tryParse(submissionDate);
+      }
     });
+    _bulkUpdate = false;
+    final subjectCode = draft['subjectCode'] as int?;
+    if (dept != null && subjectCode != null) {
+      unawaited(_restoreSubject(dept.code, subjectCode, force: true));
+    }
+  }
+
+  /// Looks the subject up without blocking the form. A draft may replace a
+  /// subject restored from the last picks ([force]); the last picks never
+  /// overwrite one that is already set.
+  Future<void> _restoreSubject(
+    int deptCode,
+    int subjectCode, {
+    bool force = false,
+  }) async {
+    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(
+      deptCode,
+    );
+    if (!mounted || _data.department?.code != deptCode) return;
+    if (!force && _data.subject != null) return;
+    for (final s in subjects) {
+      if (s.code == subjectCode) {
+        setState(() => _data.subject = s);
+        return;
+      }
+    }
   }
 
   Future<void> _restoreLastPicks() async {
@@ -178,21 +258,12 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     if (last == null) return;
     final (deptCode, subjectCode, semester) = last;
     final dept = departmentByCode(deptCode);
-    if (dept == null) return;
-    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(deptCode);
-    Subject? subject;
-    for (final s in subjects) {
-      if (s.code == subjectCode) {
-        subject = s;
-        break;
-      }
-    }
-    if (!mounted) return;
+    if (dept == null || !mounted) return;
     setState(() {
       _data.department = dept;
-      _data.subject = subject;
       _data.semester = semester;
     });
+    unawaited(_restoreSubject(dept.code, subjectCode));
   }
 
   /// Fills in the user's onboarding profile (name, index, semester,
@@ -202,6 +273,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   Future<void> _applyProfileDefaults() async {
     final profile = await RecallStore.instance.loadProfile();
     if (profile == null || !mounted) return;
+    _bulkUpdate = true;
     setState(() {
       // Draft/edit data wins; profile only fills an empty institute.
       if (_data.instituteName.isEmpty) {
@@ -228,15 +300,20 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
         }
       }
     });
+    _bulkUpdate = false;
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _pickInstitute() async {
     final raw = await RemoteDataService.instance.fetchInstitutes();
     if (!mounted) return;
     if (raw == null || raw.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't load institutes")),
-      );
+      _toast("Couldn't load institutes. Check your connection and try again.");
       return;
     }
     final result = await showSearchablePicker<Institute>(
@@ -246,18 +323,25 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       labelOf: (i) => i.name,
       subtitleOf: (i) => i.code == null ? '' : 'Code ${i.code}',
     );
-    if (result != null) {
-      HapticFeedback.selectionClick();
-      setState(() {
-        _data.instituteName = result.name;
-        _data.instituteCode = result.code ?? '';
-        _data.instituteAddress = result.address ?? '';
-        _data.instituteWebsite = result.website ?? '';
-      });
-    }
+    if (result == null) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _data.instituteName = result.name;
+      _data.instituteCode = result.code ?? '';
+      _data.instituteAddress = result.address ?? '';
+      _data.instituteWebsite = result.website ?? '';
+    });
   }
 
   Future<void> _pickDepartment() async {
+    if (btebDepartments.isEmpty) {
+      await RemoteDataService.instance.ensureDepartments();
+      if (!mounted) return;
+      if (btebDepartments.isEmpty) {
+        _toast("Couldn't load departments. Check your connection and try again.");
+        return;
+      }
+    }
     final result = await showSearchablePicker<Department>(
       context: context,
       title: 'Select Department',
@@ -265,14 +349,14 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       labelOf: (d) => '${d.longName} (${d.shortName})',
       subtitleOf: (d) => 'Code ${d.code}',
     );
-    if (result != null) {
-      HapticFeedback.selectionClick();
-      setState(() {
-        _data.department = result;
-        _data.subject = null;
-        _errors.remove('department');
-      });
-    }
+    if (result == null) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_data.department?.code != result.code) _data.subject = null;
+      _data.department = result;
+      _subjectNote = null;
+      _errors.remove('department');
+    });
   }
 
   Future<void> _pickSemester() async {
@@ -282,16 +366,15 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       items: semesters,
       labelOf: (s) => s,
     );
-    if (result != null) {
-      HapticFeedback.selectionClick();
-      setState(() {
-        _data.semester = result;
-        _errors.remove('semester');
-        // Changing semester invalidates a previously picked subject from
-        // a different semester.
-        _data.subject = null;
-      });
-    }
+    if (result == null) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      // A subject from another semester no longer applies.
+      if (_data.semester != result) _data.subject = null;
+      _data.semester = result;
+      _subjectNote = null;
+      _errors.remove('semester');
+    });
   }
 
   int? _semesterNumber() {
@@ -300,22 +383,68 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     return idx == -1 ? null : idx + 1;
   }
 
-  Future<void> _pickSubject() async {
-    if (_data.department == null || _data.semester.isEmpty) return;
-    final subjects = await AppDatabase.instance.subjectsForDeptAndSemester(
-      _data.department!.code,
-      _semesterNumber(),
-    );
-    if (subjects.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No seeded subjects for this department/semester yet'),
-        ),
+  /// Opens the subject list. While subjects are being fetched the field
+  /// shows a spinner; if there are none, the reason is shown under the
+  /// field (with Retry when the cause may be the connection).
+  Future<void> _pickSubject({bool forceDownload = false}) async {
+    final dept = _data.department;
+    final semNumber = _semesterNumber();
+    if (dept == null || semNumber == null || _loadingSubjects) return;
+
+    setState(() {
+      _loadingSubjects = true;
+      _subjectNote = null;
+    });
+
+    var subjects = <Subject>[];
+    try {
+      subjects = await AppDatabase.instance.subjectsForDeptAndSemester(
+        dept.code,
+        semNumber,
       );
-      return;
+      if (subjects.isEmpty && forceDownload) {
+        // The user asked explicitly, so skip the short back-off.
+        final ok = await AppDatabase.instance.syncSubjects(
+          dept.code,
+          force: true,
+        );
+        if (ok) {
+          subjects = await AppDatabase.instance.subjectsForDeptAndSemester(
+            dept.code,
+            semNumber,
+          );
+        }
+      }
+    } catch (_) {
+      subjects = <Subject>[];
     }
     if (!mounted) return;
+
+    if (subjects.isEmpty) {
+      // Does this department have subjects for any semester?
+      var hasAny = false;
+      try {
+        final all = await AppDatabase.instance.subjectsForDeptAndSemester(
+          dept.code,
+        );
+        hasAny = all.isNotEmpty;
+      } catch (_) {
+        hasAny = false;
+      }
+      if (!mounted) return;
+      setState(() {
+        _loadingSubjects = false;
+        _subjectNoteRetry = !hasAny;
+        _subjectNote = hasAny
+            ? 'No subjects are listed for ${dept.shortName} \u00b7 ${_data.semester} yet.'
+            : "Couldn't load subjects for ${dept.shortName}. Connect to the "
+                  'internet and try again. They are saved on your phone after '
+                  'the first download.';
+      });
+      return;
+    }
+
+    setState(() => _loadingSubjects = false);
     final result = await showSearchablePicker<Subject>(
       context: context,
       title: 'Select Subject',
@@ -323,19 +452,19 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       labelOf: (s) => s.name,
       subtitleOf: (s) => 'Code ${s.code}',
     );
-    if (result != null) {
-      HapticFeedback.selectionClick();
-      setState(() {
-        _data.subject = result;
-        _errors.remove('subject');
-      });
-    }
+    if (result == null || !mounted) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _data.subject = result;
+      _errors.remove('subject');
+    });
   }
 
   Future<void> _pickDate({required bool isSubmission}) async {
+    final current = isSubmission ? _data.submissionDate : _data.dateOfExpt;
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: current ?? DateTime.now(),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -343,18 +472,20 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     setState(() {
       if (isSubmission) {
         _data.submissionDate = picked;
+        _errors.remove('submissionDate');
       } else {
         _data.dateOfExpt = picked;
+        _errors.remove('dateOfExpt');
       }
     });
   }
 
   void _syncTextFields() {
-    _data.exptNo = int.tryParse(_exptNoCtrl.text);
+    _data.exptNo = int.tryParse(_exptNoCtrl.text.trim());
     _data.exptName = _exptNameCtrl.text;
     _data.studentName = _studentNameCtrl.text;
     _data.studentIndex = _studentIndexCtrl.text;
-    _data.boardRoll = int.tryParse(_boardRollCtrl.text);
+    _data.boardRoll = int.tryParse(_boardRollCtrl.text.trim());
     _data.batch = _batchCtrl.text;
     _data.teacherName = _teacherNameCtrl.text;
     _data.teacherRole = _teacherRoleCtrl.text;
@@ -363,40 +494,75 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
 
   bool _validate() {
     _errors.clear();
+    String? numberError(TextEditingController c) {
+      final t = c.text.trim();
+      if (t.isEmpty) return 'Required';
+      if (int.tryParse(t) == null) return 'Numbers only';
+      return null;
+    }
+
     if (_data.department == null) _errors['department'] = 'Required';
+    if (_data.semester.isEmpty) _errors['semester'] = 'Required';
     if (_data.subject == null) _errors['subject'] = 'Required';
-    if (_exptNoCtrl.text.trim().isEmpty) _errors['exptNo'] = 'Required';
+
+    final exptNoError = numberError(_exptNoCtrl);
+    if (exptNoError != null) _errors['exptNo'] = exptNoError;
     if (_exptNameCtrl.text.trim().isEmpty) _errors['exptName'] = 'Required';
     if (_data.dateOfExpt == null) _errors['dateOfExpt'] = 'Required';
     if (_data.submissionDate == null) _errors['submissionDate'] = 'Required';
-    if (_studentNameCtrl.text.trim().isEmpty)
+
+    if (_studentNameCtrl.text.trim().isEmpty) {
       _errors['studentName'] = 'Required';
-    if (_studentIndexCtrl.text.trim().isEmpty)
+    }
+    if (_studentIndexCtrl.text.trim().isEmpty) {
       _errors['studentIndex'] = 'Required';
-    if (_boardRollCtrl.text.trim().isEmpty) _errors['boardRoll'] = 'Required';
-    if (_data.semester.isEmpty) _errors['semester'] = 'Required';
+    }
+    final boardRollError = numberError(_boardRollCtrl);
+    if (boardRollError != null) _errors['boardRoll'] = boardRollError;
     if (_batchCtrl.text.trim().isEmpty) _errors['batch'] = 'Required';
-    if (_teacherNameCtrl.text.trim().isEmpty)
+
+    if (_teacherNameCtrl.text.trim().isEmpty) {
       _errors['teacherName'] = 'Required';
-    if (_teacherRoleCtrl.text.trim().isEmpty)
+    }
+    if (_teacherRoleCtrl.text.trim().isEmpty) {
       _errors['teacherRole'] = 'Required';
-    if (_teacherDeptCtrl.text.trim().isEmpty)
+    }
+    if (_teacherDeptCtrl.text.trim().isEmpty) {
       _errors['teacherDepartment'] = 'Required';
+    }
     return _errors.isEmpty;
   }
 
-  Future<void> _generatePdf() async {
-    _syncTextFields();
-    setState(() {});
-    if (!_validate()) {
-      setState(() => _fabShakeSignal++);
-      HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Fill in the highlighted fields')),
-      );
+  void _scrollToFirstError() {
+    for (final id in _fieldOrder) {
+      if (!_errors.containsKey(id)) continue;
+      final ctx = _fieldKeys[id]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.2,
+          duration: _motion(context, Motion.slow),
+          curve: Motion.standardCurve,
+        );
+      }
       return;
     }
-    setState(() => _fabState = _FabState.generating);
+  }
+
+  Future<void> _generatePdf() async {
+    if (_genState != _GenState.idle) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    _syncTextFields();
+    if (!_validate()) {
+      setState(() => _shakeSignal++);
+      HapticFeedback.heavyImpact();
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollToFirstError(),
+      );
+      _toast('Fill in the highlighted fields');
+      return;
+    }
+    setState(() => _genState = _GenState.generating);
     try {
       final bytes = await generateTopsheetPdf(_data);
 
@@ -424,9 +590,10 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
 
       final displayName = _data.exptName.isEmpty
           ? (_data.subject?.name ?? 'Topsheet')
-          : '${_data.exptName} — ${_data.subject?.name ?? ''}';
+          : '${_data.exptName} \u2014 ${_data.subject?.name ?? ''}';
       await _saveToRecents(bytes, displayName.trim(), _draftJson());
       await RecallStore.instance.clearDraft();
+      if (!mounted) return;
 
       // Clear per-experiment fields only — teacher/student/dept/batch carry
       // over to the next topsheet.
@@ -439,15 +606,16 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
         _data.submissionDate = null;
       });
 
-      if (!mounted) return;
       HapticFeedback.mediumImpact();
-      setState(() => _fabState = _FabState.done);
+      setState(() => _genState = _GenState.done);
       await Future.delayed(const Duration(milliseconds: 900));
-      if (mounted) setState(() => _fabState = _FabState.idle);
+      if (mounted) setState(() => _genState = _GenState.idle);
       if (mounted) await _showPdfSheet(bytes, displayName.trim());
+    } catch (_) {
+      if (mounted) _toast("Couldn't create the PDF. Please try again.");
     } finally {
-      if (mounted && _fabState == _FabState.generating) {
-        setState(() => _fabState = _FabState.idle);
+      if (mounted && _genState == _GenState.generating) {
+        setState(() => _genState = _GenState.idle);
       }
     }
   }
@@ -459,8 +627,9 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   ) async {
     final dir = await getApplicationDocumentsDirectory();
     final topsheetsDir = Directory(p.join(dir.path, 'topsheets'));
-    if (!await topsheetsDir.exists())
+    if (!await topsheetsDir.exists()) {
       await topsheetsDir.create(recursive: true);
+    }
     final file = File(
       p.join(
         topsheetsDir.path,
@@ -499,18 +668,14 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       dynamicLayout: false,
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(ok ? 'Save dialog completed' : 'Save dialog canceled'),
-      ),
-    );
+    _toast(ok ? 'Save dialog completed' : 'Save dialog canceled');
   }
 
   Future<void> _showPdfSheet(Uint8List bytes, String name) {
     final title = name.isEmpty ? 'Topsheet' : name;
     return Navigator.of(context).push(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 280),
+        transitionDuration: _motion(context, Motion.slow),
         pageBuilder: (ctx, anim, secAnim) => FadeTransition(
           opacity: anim,
           child: _PdfResultPage(
@@ -528,6 +693,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
   Future<void> _fillStudentProfile(String name) async {
     final profile = await RecallStore.instance.studentProfile(name);
     if (profile == null || !mounted) return;
+    _bulkUpdate = true;
     setState(() {
       _studentIndexCtrl.text =
           profile['studentIndex'] ?? _studentIndexCtrl.text;
@@ -537,6 +703,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       _errors.remove('boardRoll');
       _errors.remove('batch');
     });
+    _bulkUpdate = false;
   }
 
   @override
@@ -555,228 +722,426 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     super.dispose();
   }
 
+  Widget _buildBottomBar(ColorScheme scheme) {
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    return AnimatedSize(
+      duration: _motion(context, Motion.standard),
+      curve: Motion.standardCurve,
+      alignment: Alignment.bottomCenter,
+      child: keyboardOpen
+          ? const SizedBox(width: double.infinity)
+          : Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(
+                16,
+                10,
+                16,
+                12 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
+              decoration: BoxDecoration(
+                color: scheme.surface,
+                border: Border(top: BorderSide(color: scheme.outlineVariant)),
+              ),
+              child: _GenerateButton(
+                state: _genState,
+                onPressed: _generatePdf,
+                shakeSignal: _shakeSignal,
+              ),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
-          const _AtmosphereBackground(),
-          SafeArea(bottom: false, child: ListView(controller: _scrollController,
-              padding: EdgeInsets.fromLTRB(16, 74, 16, 48 + MediaQuery.viewPaddingOf(context).bottom),
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              children: [
-                Text(
-                  'Create Topsheet',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Generate a clean, share-ready practical sheet',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                AnimatedSize(
-                  duration: Motion.standard,
-                  curve: Motion.standardCurve,
-                  alignment: Alignment.topCenter,
-                  child: _showHint
-                      ? Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: _HintBanner(
-                            onDismiss: () {
-                              RecallStore.instance.markHintSeen();
-                              setState(() => _showHint = false);
-                            },
+    final subjectReady = _data.department != null && _data.semester.isNotEmpty;
+
+    int count(List<bool> flags) => flags.where((f) => f).length;
+    final courseDone = count([
+      _data.department != null,
+      _data.semester.isNotEmpty,
+      _data.subject != null,
+    ]);
+    final experimentDone = count([
+      _exptNoCtrl.text.trim().isNotEmpty,
+      _exptNameCtrl.text.trim().isNotEmpty,
+      _data.dateOfExpt != null,
+      _data.submissionDate != null,
+    ]);
+    final studentDone = count([
+      _studentNameCtrl.text.trim().isNotEmpty,
+      _studentIndexCtrl.text.trim().isNotEmpty,
+      _boardRollCtrl.text.trim().isNotEmpty,
+      _batchCtrl.text.trim().isNotEmpty,
+    ]);
+    final teacherDone = count([
+      _teacherNameCtrl.text.trim().isNotEmpty,
+      _teacherRoleCtrl.text.trim().isNotEmpty,
+      _teacherDeptCtrl.text.trim().isNotEmpty,
+    ]);
+    final filled = courseDone + experimentDone + studentDone + teacherDone;
+
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _saveDraft();
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Create topsheet')),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _ProgressCard(
+                      subject: _data.subject?.name,
+                      filled: filled,
+                      total: _requiredCount,
+                    ),
+                    AnimatedSize(
+                      duration: _motion(context, Motion.standard),
+                      curve: Motion.standardCurve,
+                      alignment: Alignment.topCenter,
+                      child: _showHint
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: _HintBanner(
+                                onDismiss: () {
+                                  RecallStore.instance.markHintSeen();
+                                  setState(() => _showHint = false);
+                                },
+                              ),
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                    const SizedBox(height: 20),
+                    _Section(
+                      title: 'Course',
+                      icon: Icons.menu_book_rounded,
+                      done: courseDone,
+                      total: 3,
+                      children: [
+                        _Field(
+                          label: 'Institute',
+                          child: _PickerTile(
+                            value: _data.instituteName.isEmpty
+                                ? null
+                                : _data.instituteName,
+                            placeholder: 'Select institute',
+                            onTap: _pickInstitute,
                           ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                _StatusBoard(
-                  entries: [
-                    _StatusEntry(
-                      label: 'Department',
-                      value: _data.department?.shortName,
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['department'],
+                          child: _Field(
+                            label: 'Department',
+                            child: _PickerTile(
+                              value: _data.department == null
+                                  ? null
+                                  : '${_data.department!.longName} (${_data.department!.shortName})',
+                              placeholder: 'Select department',
+                              onTap: _pickDepartment,
+                              errorText: _errors['department'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['semester'],
+                          child: _Field(
+                            label: 'Semester',
+                            child: _PickerTile(
+                              value: _data.semester.isEmpty
+                                  ? null
+                                  : _data.semester,
+                              placeholder: 'Select semester',
+                              onTap: _pickSemester,
+                              errorText: _errors['semester'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['subject'],
+                          child: _Field(
+                            label: 'Subject',
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _PickerTile(
+                                  value: _data.subject?.name,
+                                  placeholder: subjectReady
+                                      ? 'Select subject'
+                                      : 'Choose department and semester first',
+                                  onTap: subjectReady && !_loadingSubjects
+                                      ? _pickSubject
+                                      : null,
+                                  loading: _loadingSubjects,
+                                  errorText: _errors['subject'],
+                                ),
+                                if (_subjectNote != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: _SubjectNote(
+                                      message: _subjectNote!,
+                                      onRetry: _subjectNoteRetry
+                                          ? () =>
+                                                _pickSubject(forceDownload: true)
+                                          : null,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    _StatusEntry(label: 'Subject', value: _data.subject?.name),
-                    _StatusEntry(
-                      label: 'Semester',
-                      value: _data.semester.isEmpty ? null : _data.semester,
+                    const SizedBox(height: 18),
+                    _Section(
+                      title: 'Experiment',
+                      icon: Icons.science_rounded,
+                      done: experimentDone,
+                      total: 4,
+                      children: [
+                        KeyedSubtree(
+                          key: _fieldKeys['exptNo'],
+                          child: _Field(
+                            label: 'Experiment no.',
+                            child: _TextInput(
+                              controller: _exptNoCtrl,
+                              hint: 'e.g. 3',
+                              keyboardType: TextInputType.number,
+                              errorText: _errors['exptNo'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['exptName'],
+                          child: _Field(
+                            label: 'Experiment name',
+                            child: RecallTextField(
+                              field: 'exptName',
+                              label: 'Name of the experiment',
+                              controller: _exptNameCtrl,
+                              errorText: _errors['exptName'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['dateOfExpt'],
+                          child: _Field(
+                            label: 'Date of experiment',
+                            child: _PickerTile(
+                              value: _data.dateOfExpt == null
+                                  ? null
+                                  : _df.format(_data.dateOfExpt!),
+                              placeholder: 'Select date',
+                              trailing: Icons.calendar_today_rounded,
+                              onTap: () => _pickDate(isSubmission: false),
+                              errorText: _errors['dateOfExpt'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['submissionDate'],
+                          child: _Field(
+                            label: 'Submission date',
+                            child: _PickerTile(
+                              value: _data.submissionDate == null
+                                  ? null
+                                  : _df.format(_data.submissionDate!),
+                              placeholder: 'Select date',
+                              trailing: Icons.calendar_today_rounded,
+                              onTap: () => _pickDate(isSubmission: true),
+                              errorText: _errors['submissionDate'],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _Section(
+                      title: 'Student',
+                      icon: Icons.school_rounded,
+                      done: studentDone,
+                      total: 4,
+                      children: [
+                        KeyedSubtree(
+                          key: _fieldKeys['studentName'],
+                          child: _Field(
+                            label: 'Student name',
+                            child: RecallTextField(
+                              field: 'studentName',
+                              label: 'Full name',
+                              controller: _studentNameCtrl,
+                              errorText: _errors['studentName'],
+                              onSelected: _fillStudentProfile,
+                            ),
+                          ),
+                        ),
+                  KeyedSubtree(
+                          key: _fieldKeys['studentIndex'],
+                          child: _Field(
+                            label: 'Student index',
+                            child: RecallTextField(
+                              field: 'studentIndex',
+                              label: 'Roll or index',
+                              controller: _studentIndexCtrl,
+                              errorText: _errors['studentIndex'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['boardRoll'],
+                          child: _Field(
+                            label: 'Board roll',
+                            child: _TextInput(
+                              controller: _boardRollCtrl,
+                              hint: 'Board roll number',
+                              keyboardType: TextInputType.number,
+                              errorText: _errors['boardRoll'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['batch'],
+                          child: _Field(
+                            label: 'Batch',
+                            child: RecallTextField(
+                              field: 'batch',
+                              label: 'Batch or session',
+                              controller: _batchCtrl,
+                              errorText: _errors['batch'],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _Section(
+                      title: 'Teacher',
+                      icon: Icons.badge_rounded,
+                      done: teacherDone,
+                      total: 3,
+                      children: [
+                        KeyedSubtree(
+                          key: _fieldKeys['teacherName'],
+                          child: _Field(
+                            label: 'Teacher name',
+                            child: RecallTextField(
+                              field: 'teacherName',
+                              label: 'Full name',
+                              controller: _teacherNameCtrl,
+                              errorText: _errors['teacherName'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['teacherRole'],
+                          child: _Field(
+                            label: 'Teacher role',
+                            child: RecallTextField(
+                              field: 'teacherRole',
+                              label: 'Designation',
+                              controller: _teacherRoleCtrl,
+                              errorText: _errors['teacherRole'],
+                            ),
+                          ),
+                        ),
+                        KeyedSubtree(
+                          key: _fieldKeys['teacherDepartment'],
+                          child: _Field(
+                            label: 'Teacher department',
+                            child: RecallTextField(
+                              field: 'teacherDepartment',
+                              label: 'Department',
+                              controller: _teacherDeptCtrl,
+                              errorText: _errors['teacherDepartment'],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                _Section(
-                  title: 'Course',
-                  icon: Icons.menu_book_rounded,
-                  children: [
-                    _PickerField(
-                      label: 'Institute',
-                      value: _data.instituteName.isEmpty
-                          ? null
-                          : _data.instituteName,
-                      onTap: _pickInstitute,
-                    ),
-                    const SizedBox(height: 12),
-                    _PickerField(
-                      label: 'Department',
-                      value: _data.department == null
-                          ? null
-                          : '${_data.department!.shortName} · ${_data.department!.longName}',
-                      onTap: _pickDepartment,
-                      errorText: _errors['department'],
-                    ),
-                    const SizedBox(height: 12),
-                    _PickerField(
-                      label: 'Semester',
-                      value: _data.semester.isEmpty ? null : _data.semester,
-                      enabled: _data.department != null,
-                      onTap: _pickSemester,
-                      errorText: _errors['semester'],
-                    ),
-                    const SizedBox(height: 12),
-                    _PickerField(
-                      label: 'Subject',
-                      value: _data.subject?.name,
-                      enabled: _data.department != null && _data.semester.isNotEmpty,
-                      onTap: _pickSubject,
-                      errorText: _errors['subject'],
-                    ),
-                  ],
+              ),
+            ),
+            _buildBottomBar(scheme),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Top card: the chosen subject (or a placeholder) and how much of the form
+/// is filled in.
+class _ProgressCard extends StatelessWidget {
+  final String? subject;
+  final int filled;
+  final int total;
+
+  const _ProgressCard({
+    required this.subject,
+    required this.filled,
+    required this.total,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final complete = filled >= total;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  subject ?? 'New topsheet',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: textTheme.titleLarge,
                 ),
-                const SizedBox(height: 18),
-                _Section(
-                  title: 'Experiment',
-                  icon: Icons.science_rounded,
-                  children: [
-                    _TextInput(
-                      controller: _exptNoCtrl,
-                      label: 'Experiment no.',
-                      keyboardType: TextInputType.number,
-                      errorText: _errors['exptNo'],
-                    ),
-                    const SizedBox(height: 12),
-                    RecallTextField(
-                      field: 'exptName',
-                      label: 'Experiment name',
-                      controller: _exptNameCtrl,
-                      errorText: _errors['exptName'],
-                    ),
-                    const SizedBox(height: 12),
-                    _PickerField(
-                      label: 'Date of experiment',
-                      value: _data.dateOfExpt == null
-                          ? null
-                          : _df.format(_data.dateOfExpt!),
-                      onTap: () => _pickDate(isSubmission: false),
-                      errorText: _errors['dateOfExpt'],
-                    ),
-                    const SizedBox(height: 12),
-                    _PickerField(
-                      label: 'Submission date',
-                      value: _data.submissionDate == null
-                          ? null
-                          : _df.format(_data.submissionDate!),
-                      onTap: () => _pickDate(isSubmission: true),
-                      errorText: _errors['submissionDate'],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                _Section(
-                  title: 'Student',
-                  icon: Icons.school_rounded,
-                  children: [
-                    RecallTextField(
-                      field: 'studentName',
-                      label: 'Student name',
-                      controller: _studentNameCtrl,
-                      errorText: _errors['studentName'],
-                      onSelected: _fillStudentProfile,
-                    ),
-                    const SizedBox(height: 12),
-                    RecallTextField(
-                      field: 'studentIndex',
-                      label: 'Student index',
-                      controller: _studentIndexCtrl,
-                      errorText: _errors['studentIndex'],
-                    ),
-                    const SizedBox(height: 12),
-                    _TextInput(
-                      controller: _boardRollCtrl,
-                      label: 'Board roll',
-                      keyboardType: TextInputType.number,
-                      errorText: _errors['boardRoll'],
-                    ),
-                    const SizedBox(height: 12),
-                    RecallTextField(
-                      field: 'batch',
-                      label: 'Batch',
-                      controller: _batchCtrl,
-                      errorText: _errors['batch'],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                _Section(
-                  title: 'Teacher',
-                  icon: Icons.badge_rounded,
-                  children: [
-                    RecallTextField(
-                      field: 'teacherName',
-                      label: 'Teacher name',
-                      controller: _teacherNameCtrl,
-                      errorText: _errors['teacherName'],
-                    ),
-                    const SizedBox(height: 12),
-                    RecallTextField(
-                      field: 'teacherRole',
-                      label: 'Teacher role',
-                      controller: _teacherRoleCtrl,
-                      errorText: _errors['teacherRole'],
-                    ),
-                    const SizedBox(height: 12),
-                    RecallTextField(
-                      field: 'teacherDepartment',
-                      label: 'Teacher department',
-                      controller: _teacherDeptCtrl,
-                      errorText: _errors['teacherDepartment'],
-                    ),
-                  ],
-                ),
+              ),
+              if (complete) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.check_circle_rounded, color: scheme.primary),
               ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            complete
+                ? 'Everything is filled in. Ready to generate.'
+                : '$filled of $total required fields filled',
+            style: textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
           ),
-          // Floating header — blurred back button (left) + compact generate
-          // pill (right). Intentional blur exception: a small floating control
-          // over scrolling content, not a card/surface treatment.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _BlurIconButton(
-                      icon: Icons.arrow_back_rounded,
-                      onTap: () => Navigator.of(context).pop(),
-                    ),
-                    _GenerateFab(
-                      state: _fabState,
-                      onPressed: _generatePdf,
-                      shakeSignal: _fabShakeSignal,
-                    ),
-                  ],
-                ),
+          const SizedBox(height: 12),
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: filled / total),
+            duration: _motion(context, Motion.standard),
+            curve: Motion.standardCurve,
+            builder: (context, value, _) => ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: value,
+                minHeight: 6,
+                backgroundColor: scheme.outlineVariant,
+                color: scheme.primary,
               ),
             ),
           ),
@@ -785,77 +1150,324 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
     );
   }
 }
-
-/// Small circular button with a frosted-glass backdrop blur — floats over
-/// scrolling content. Used only for this one floating control, not for
-/// cards/surfaces (see design.md).
-class _BlurIconButton extends StatelessWidget {
+/// A titled group of fields with a small "2/4" or "Done" indicator.
+class _Section extends StatelessWidget {
+  final String title;
   final IconData icon;
-  final VoidCallback onTap;
+  final int done;
+  final int total;
+  final List<Widget> children;
 
-  const _BlurIconButton({required this.icon, required this.onTap});
+  const _Section({
+    required this.title,
+    required this.icon,
+    required this.done,
+    required this.total,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Pressable(
-          onTap: onTap,
-          child: Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: 0.55),
-              shape: BoxShape.circle,
-              border: Border.all(color: scheme.outlineVariant),
-            ),
-            child: Icon(icon, size: 20, color: scheme.onSurface),
+    final textTheme = Theme.of(context).textTheme;
+    final complete = done >= total;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+          child: Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 15, color: scheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Text(title, style: textTheme.titleMedium),
+              const Spacer(),
+              if (complete) ...[
+                Icon(Icons.check_circle_rounded, size: 16, color: scheme.primary),
+                const SizedBox(width: 4),
+                Text(
+                  'Done',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ] else
+                Text(
+                  '$done/$total',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
           ),
         ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: scheme.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(height: 16),
+                children[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Field with its name always visible above it.
+class _Field extends StatelessWidget {
+  final String label;
+  final Widget child;
+
+  const _Field({required this.label, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
+class _TextInput extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final TextInputType? keyboardType;
+  final String? errorText;
+
+  const _TextInput({
+    required this.controller,
+    required this.hint,
+    this.keyboardType,
+    this.errorText,
+  });
+
+  @override
+  Widget build(BuildContext context) => TextField(
+    controller: controller,
+    keyboardType: keyboardType,
+    textInputAction: TextInputAction.next,
+    decoration: InputDecoration(hintText: hint, errorText: errorText),
+  );
+}
+
+/// Tappable field that opens a picker. Shows a spinner while [loading] and
+/// a red outline plus message when [errorText] is set.
+class _PickerTile extends StatelessWidget {
+  final String? value;
+  final String placeholder;
+  final VoidCallback? onTap;
+  final bool loading;
+  final String? errorText;
+  final IconData trailing;
+
+  const _PickerTile({
+    required this.value,
+    required this.placeholder,
+    required this.onTap,
+    this.loading = false,
+    this.errorText,
+    this.trailing = Icons.keyboard_arrow_down_rounded,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final enabled = onTap != null || loading;
+    final hasError = errorText != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Semantics(
+          button: true,
+          enabled: onTap != null,
+          label: value ?? placeholder,
+          excludeSemantics: true,
+          onTap: onTap,
+          child: Pressable(
+            pressedScale: 0.99,
+            onTap: onTap,
+            child: AnimatedOpacity(
+              opacity: enabled ? 1 : 0.55,
+              duration: _motion(context, Motion.fast),
+              child: AnimatedContainer(
+                duration: _motion(context, Motion.fast),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 15,
+                ),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: hasError ? scheme.error : Colors.transparent,
+                    width: hasError ? 1.5 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        value ?? placeholder,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: value == null
+                              ? scheme.onSurfaceVariant
+                              : scheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    if (loading)
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: scheme.primary,
+                        ),
+                      )
+                    else
+                      Icon(trailing, size: 20, color: scheme.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (hasError)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(
+              errorText!,
+              style: textTheme.bodySmall?.copyWith(color: scheme.error),
+            ),
+          ),
+      ],
+    );
+  }
+}
+/// Explains why the subject list is empty, with Retry when the cause may be
+/// the connection.
+class _SubjectNote extends StatelessWidget {
+  final String message;
+  final VoidCallback? onRetry;
+
+  const _SubjectNote({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: scheme.error.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 18, color: scheme.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: textTheme.bodySmall?.copyWith(
+                color: scheme.onSurface,
+                height: 1.35,
+              ),
+            ),
+          ),
+          if (onRetry != null)
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('Retry'),
+            ),
+        ],
       ),
     );
   }
 }
 
-/// FAB that morphs idle → spinner → check, instead of swapping widgets flatly.
-class _GenerateFab extends StatefulWidget {
-  final _FabState state;
+/// Full-width Generate button: idle -> spinner -> check, with a shake when
+/// the form has errors.
+class _GenerateButton extends StatefulWidget {
+  final _GenState state;
   final VoidCallback onPressed;
   final int shakeSignal;
 
-  const _GenerateFab({
+  const _GenerateButton({
     required this.state,
     required this.onPressed,
     required this.shakeSignal,
   });
 
   @override
-  State<_GenerateFab> createState() => _GenerateFabState();
+  State<_GenerateButton> createState() => _GenerateButtonState();
 }
 
-class _GenerateFabState extends State<_GenerateFab>
+class _GenerateButtonState extends State<_GenerateButton>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _shakeController = AnimationController(
+  late final AnimationController _shake = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 260),
   );
 
   @override
-  void didUpdateWidget(_GenerateFab oldWidget) {
+  void didUpdateWidget(_GenerateButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.shakeSignal != oldWidget.shakeSignal &&
-        motionTierOf(context) != MotionTier.reduced) {
-      _shakeController.forward(from: 0);
+    final reduced =
+        (MediaQuery.maybeOf(context)?.disableAnimations ?? false) ||
+        motionTierOf(context) == MotionTier.reduced;
+    if (widget.shakeSignal != oldWidget.shakeSignal && !reduced) {
+      _shake.forward(from: 0);
     }
   }
 
   @override
   void dispose() {
-    _shakeController.dispose();
+    _shake.dispose();
     super.dispose();
   }
 
@@ -868,77 +1480,71 @@ class _GenerateFabState extends State<_GenerateFab>
 
   @override
   Widget build(BuildContext context) {
-    final tier = motionTierOf(context);
     final scheme = Theme.of(context).colorScheme;
     final label = switch (widget.state) {
-      _FabState.idle => 'Generate',
-      _FabState.generating => 'Working…',
-      _FabState.done => 'Saved',
+      _GenState.idle => 'Generate PDF',
+      _GenState.generating => 'Creating PDF\u2026',
+      _GenState.done => 'Saved',
     };
     final icon = switch (widget.state) {
-      _FabState.idle => Icon(
+      _GenState.idle => Icon(
         Icons.picture_as_pdf_rounded,
-        key: ValueKey('idle'),
-        size: 17,
-        color: Theme.of(context).colorScheme.onPrimary,
+        key: const ValueKey('idle'),
+        size: 20,
+        color: scheme.onPrimary,
       ),
-      _FabState.generating => SizedBox(
-        key: ValueKey('spin'),
-        width: 15,
-        height: 15,
-        child: CircularProgressIndicator(strokeWidth: 2, color: Theme.of(context).colorScheme.onPrimary),
+      _GenState.generating => SizedBox(
+        key: const ValueKey('spin'),
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: scheme.onPrimary,
+        ),
       ),
-      _FabState.done => Icon(
+      _GenState.done => Icon(
         Icons.check_rounded,
-        key: ValueKey('done'),
-        size: 17,
-        color: Theme.of(context).colorScheme.onPrimary,
+        key: const ValueKey('done'),
+        size: 20,
+        color: scheme.onPrimary,
       ),
     };
     return AnimatedBuilder(
-      animation: _shakeController,
+      animation: _shake,
       builder: (context, child) => Transform.translate(
-        offset: Offset(8 * _offsetFor(_shakeController.value), 0),
+        offset: Offset(8 * _offsetFor(_shake.value), 0),
         child: child,
       ),
       child: Pressable(
-        onTap: widget.state == _FabState.idle ? widget.onPressed : null,
+        onTap: widget.state == _GenState.idle ? widget.onPressed : null,
         child: Container(
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          height: 56,
+          width: double.infinity,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: scheme.primary,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.primary.withValues(alpha: 0.35),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(28),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedSwitcher(
-                duration: tier == MotionTier.reduced
-                    ? Motion.fast
-                    : Motion.standard,
-                reverseDuration: Motion.fast,
+                duration: _motion(context, Motion.standard),
+                reverseDuration: _motion(context, Motion.fast),
                 switchInCurve: Curves.easeOutBack,
                 switchOutCurve: Curves.easeOutCubic,
                 transitionBuilder: (child, anim) =>
                     ScaleTransition(scale: anim, child: child),
                 child: icon,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               AnimatedSwitcher(
-                duration: Motion.fast,
+                duration: _motion(context, Motion.fast),
                 child: Text(
                   label,
                   key: ValueKey(label),
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimary,
+                    color: scheme.onPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -950,7 +1556,6 @@ class _GenerateFabState extends State<_GenerateFab>
     );
   }
 }
-
 class _HintBanner extends StatelessWidget {
   final VoidCallback onDismiss;
   const _HintBanner({required this.onDismiss});
@@ -1002,7 +1607,7 @@ class _HintBanner extends StatelessWidget {
                     ),
                     children: const [
                       TextSpan(
-                        text: 'Fill it once — ',
+                        text: 'Fill it once \u2014 ',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                       TextSpan(
@@ -1026,225 +1631,6 @@ class _HintBanner extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// A plain grouped block, iOS-Settings style: a small muted caption sits
-/// above an unadorned rounded container — no card border, no shadow, no
-/// per-section icon or accent color.
-class _Section extends StatelessWidget {
-  final String title;
-  final IconData? icon;
-  final List<Widget> children;
-
-  const _Section({required this.title, this.icon, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10, left: 2),
-          child: Row(
-            children: [
-              if (icon != null) ...[
-                Container(
-                  width: 26,
-                  height: 26,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, size: 15, color: scheme.primary),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                title.toUpperCase(),
-                style: textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.9,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(12),
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: children,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TextInput extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final TextInputType? keyboardType;
-  final String? errorText;
-
-  const _TextInput({
-    required this.controller,
-    required this.label,
-    this.keyboardType,
-    this.errorText,
-  });
-
-  @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    keyboardType: keyboardType,
-    decoration: InputDecoration(hintText: label, errorText: errorText),
-  );
-}
-
-class _PickerField extends StatelessWidget {
-  final String label;
-  final String? value;
-  final VoidCallback onTap;
-  final bool enabled;
-  final String? errorText;
-
-  const _PickerField({
-    required this.label,
-    required this.value,
-    required this.onTap,
-    this.enabled = true,
-    this.errorText,
-  });
-
-  @override
-  Widget build(BuildContext context) => Pressable(
-    pressedScale: 0.99,
-    onTap: enabled ? onTap : null,
-    child: AnimatedOpacity(
-      opacity: enabled ? 1 : 0.5,
-      duration: Motion.fast,
-      curve: Curves.easeOutCubic,
-      child: InputDecorator(
-        decoration: InputDecoration(hintText: label, errorText: errorText),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                value ?? 'Select…',
-                style: TextStyle(
-                  color: value == null
-                      ? Theme.of(context).hintColor
-                      : Theme.of(context).textTheme.bodyLarge?.color,
-                ),
-              ),
-            ),
-            Container(
-              width: 24,
-              height: 24,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _AtmosphereBackground extends StatelessWidget {
-  const _AtmosphereBackground();
-
-  @override
-  Widget build(BuildContext context) {
-    // Dark-premium: flat solid background, no gradient/blur orbs.
-    return DecoratedBox(
-      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface),
-    );
-  }
-}
-
-class _StatusEntry {
-  final String label;
-  final String? value;
-
-  const _StatusEntry({required this.label, required this.value});
-}
-
-class _StatusBoard extends StatelessWidget {
-  final List<_StatusEntry> entries;
-
-  const _StatusBoard({required this.entries});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          for (var i = 0; i < entries.length; i++) ...[
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entries[i].label.toUpperCase(),
-                    style: textTheme.labelSmall?.copyWith(
-                      letterSpacing: 0.82,
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    entries[i].value ?? 'Not selected',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: entries[i].value == null
-                          ? scheme.onSurfaceVariant
-                          : scheme.onSurface,
-                      fontWeight: entries[i].value == null
-                          ? FontWeight.w400
-                          : FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (i < entries.length - 1)
-              Container(
-                width: 1,
-                height: 30,
-                margin: const EdgeInsets.symmetric(horizontal: 10),
-                color: scheme.outlineVariant,
-              ),
-          ],
-        ],
       ),
     );
   }
@@ -1380,12 +1766,12 @@ class _PdfResultPage extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.share_rounded, size: 19, color: Theme.of(context).colorScheme.onPrimary),
+                              Icon(Icons.share_rounded, size: 19, color: scheme.onPrimary),
                               const SizedBox(width: 8),
                               Text(
                                 'Share',
                                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  color: Theme.of(context).colorScheme.onPrimary,
+                                  color: scheme.onPrimary,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
