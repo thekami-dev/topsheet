@@ -32,6 +32,8 @@ Future<void> applyThemeMode(String mode) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Start downloading institutes and departments right away, so the list is ready long before the user reaches the institute step.
+  unawaited(RemoteDataService.instance.fetchInstitutes());
   // Edge-to-edge: draw behind system bars, keep bars transparent.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -42,12 +44,7 @@ void main() async {
   await loadThemePalette();
   await loadThemePureBlack();
   // Departments come from the cloud (cached): load them before any screen needs them.
-  await RemoteDataService.instance.ensureDepartments().timeout(
-    const Duration(milliseconds: 1500),
-    onTimeout: () => false,
-  );
-  // Warm the institute list so onboarding finds it ready.
-  unawaited(RemoteDataService.instance.fetchInstitutes());
+  await RemoteDataService.instance.ensureDepartments(waitForNetwork: false);
   final saved = await RecallStore.instance.themeMode();
   themeModeNotifier.value = switch (saved) {
     'light' => ThemeMode.light,
