@@ -42,7 +42,10 @@ void main() async {
   await loadThemePalette();
   await loadThemePureBlack();
   // Departments come from the cloud (cached): load them before any screen needs them.
-  await RemoteDataService.instance.ensureDepartments(waitForNetwork: false);
+  await RemoteDataService.instance.ensureDepartments().timeout(
+    const Duration(milliseconds: 1500),
+    onTimeout: () => false,
+  );
   // Warm the institute list so onboarding finds it ready.
   unawaited(RemoteDataService.instance.fetchInstitutes());
   final saved = await RecallStore.instance.themeMode();
