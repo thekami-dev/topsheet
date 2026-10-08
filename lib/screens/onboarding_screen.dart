@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/motion.dart';
 import '../data/departments.dart';
 import '../data/recall_store.dart';
+import '../db/app_database.dart';
 import '../models/institute.dart';
 import '../models/topsheet_data.dart' show semesters;
 import '../services/remote_data_service.dart';
@@ -14,6 +16,15 @@ import 'library_screen.dart';
 /* Hallmark · genre: dark-premium · macrostructure: Workbench
  * design-system: design.md · designed-as-app
  */
+
+/// Animation length that respects the OS reduce-motion flag and the app's
+/// own jank-based downgrade.
+Duration _motion(BuildContext context, Duration full) {
+  if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+    return Duration.zero;
+  }
+  return motionTierOf(context) == MotionTier.reduced ? Motion.fast : full;
+}
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -31,6 +42,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   List<Institute>? _institutes;
   bool _loadingInstitutes = true;
+  bool _institutesFailed = false;
   Institute? _selectedInstitute;
   Department? _selectedDept;
   String? _selectedSemester;
@@ -86,8 +98,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (!mounted) return;
     setState(() {
       _institutes = data?.map(Institute.fromJson).toList() ?? [];
+      _institutesFailed = data == null;
       _loadingInstitutes = false;
     });
+  }
+
+  Future<void> _retryInstitutes() async {
+    setState(() {
+      _loadingInstitutes = true;
+      _institutesFailed = false;
+    });
+    await _loadInstitutes();
   }
 
   bool get _isWelcome => _step == 0;
@@ -114,10 +135,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     HapticFeedback.selectionClick();
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _step = step);
+    final d = _motion(context, Motion.slow);
+    if (d == Duration.zero) {
+      _pageController.jumpToPage(step);
+      return;
+    }
     await _pageController.animateToPage(
       step,
-      duration: const Duration(milliseconds: 340),
-      curve: Curves.easeOutCubic,
+      duration: d,
+      curve: Motion.standardCurve,
     );
   }
 
@@ -173,7 +199,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       deptCode: _selectedDept!.code,
       semester: _selectedSemester!,
     );
-    unawaited(RemoteDataService.instance.fetchSubjects(_selectedDept!.code));
+    unawaited(
+      AppDatabase.instance.syncSubjects(_selectedDept!.code, force: true),
+    );
     if (!mounted) return;
     Navigator.of(
       context,
@@ -213,47 +241,56 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(scheme),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  const _WelcomeStep(),
-                  _NameStep(
-                    controller: _nameCtrl,
-                    onChanged: () => setState(() {}),
-                    onSubmit: _next,
-                  ),
-                  _IndexStep(
-                    controller: _indexCtrl,
-                    onChanged: () => setState(() {}),
-                    onSubmit: _next,
-                  ),
-                  _InstituteStep(
-                    loading: _loadingInstitutes,
-                    institutes: _institutes ?? [],
-                    selected: _selectedInstitute,
-                    onSelect: _onInstituteSelected,
-                  ),
-                  _DepartmentStep(
-                    institute: _selectedInstitute,
-                    selected: _selectedDept,
-                    onSelect: (d) => setState(() => _selectedDept = d),
-                  ),
-                  _SemesterStep(
-                    selected: _selectedSemester,
-                    onSelect: (s) => setState(() => _selectedSemester = s),
-                  ),
-                ],
+    return PopScope(
+      // System back walks one step back instead of closing the app.
+      canPop: _step == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !_saving) _back();
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(scheme),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    const _WelcomeStep(),
+                    _NameStep(
+                      controller: _nameCtrl,
+                      onChanged: () => setState(() {}),
+                      onSubmit: _next,
+                    ),
+                    _IndexStep(
+                      controller: _indexCtrl,
+                      onChanged: () => setState(() {}),
+                      onSubmit: _next,
+                    ),
+                    _InstituteStep(
+                      loading: _loadingInstitutes,
+                      failed: _institutesFailed,
+                      onRetry: _retryInstitutes,
+                      institutes: _institutes ?? [],
+                      selected: _selectedInstitute,
+                      onSelect: _onInstituteSelected,
+                    ),
+                    _DepartmentStep(
+                      institute: _selectedInstitute,
+                      selected: _selectedDept,
+                      onSelect: (d) => setState(() => _selectedDept = d),
+                    ),
+                    _SemesterStep(
+                      selected: _selectedSemester,
+                      onSelect: (s) => setState(() => _selectedSemester = s),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            _buildFooter(scheme),
-          ],
+              _buildFooter(scheme),
+            ],
+          ),
         ),
       ),
     );
@@ -267,25 +304,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         height: 44,
         child: Row(
           children: [
-            if (!_isWelcome)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: scheme.outlineVariant),
-                ),
-                child: Text(
-                  '${_formStep + 1}/${_formSteps.length}',
-                  style: textTheme.labelLarge?.copyWith(
-                    color: scheme.onSurface,
+            if (_isWelcome)
+              const Spacer()
+            else
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Step ${_formStep + 1} of ${_formSteps.length}',
+                        style: textTheme.labelSmall,
+                      ),
+                      const SizedBox(height: 6),
+                      _StepBar(
+                        current: _formStep,
+                        total: _formSteps.length,
+                      ),
+                    ],
                   ),
                 ),
               ),
-            const Spacer(),
             if (!_isWelcome)
               Semantics(
                 button: true,
@@ -328,11 +369,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _buildFooter(ColorScheme scheme) {
     final isLast = !_isWelcome && _formStep == _formSteps.length - 1;
     final enabled = (_isWelcome || _canProceed) && !_saving;
+    final label = _isWelcome ? 'Get started' : (isLast ? 'Finish' : 'Continue');
+    final fg = enabled ? scheme.onPrimary : scheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
       child: Row(
         children: [
-          if (!_isWelcome)
+          if (!_isWelcome) ...[
             Semantics(
               button: true,
               label: 'Back',
@@ -350,43 +393,98 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
               ),
             ),
-          const Spacer(),
-          Semantics(
-            button: true,
-            label: isLast ? 'Finish' : 'Next',
-            child: Pressable(
-              onTap: enabled ? _next : null,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                width: 72,
-                height: 56,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: enabled
-                      ? scheme.primary
-                      : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: _saving
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: scheme.onPrimary,
+            const SizedBox(width: 12),
+          ],
+          Expanded(
+            child: Semantics(
+              button: true,
+              enabled: enabled,
+              label: label,
+              child: Pressable(
+                onTap: enabled ? _next : null,
+                child: AnimatedContainer(
+                  duration: _motion(context, Motion.standard),
+                  curve: Motion.standardCurve,
+                  height: 56,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: enabled
+                        ? scheme.primary
+                        : scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  child: _saving
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: scheme.onPrimary,
+                          ),
+                        )
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              label,
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
+                                    color: fg,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              isLast
+                                  ? Icons.check_rounded
+                                  : Icons.arrow_forward_rounded,
+                              color: fg,
+                              size: 20,
+                            ),
+                          ],
                         ),
-                      )
-                    : Icon(
-                        isLast
-                            ? Icons.check_rounded
-                            : Icons.arrow_forward_rounded,
-                        color: enabled
-                            ? scheme.onPrimary
-                            : scheme.onSurfaceVariant,
-                      ),
+                ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Segmented progress bar: one segment per form step.
+class _StepBar extends StatelessWidget {
+  final int current;
+  final int total;
+
+  const _StepBar({required this.current, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final dur = _motion(context, Motion.standard);
+    return Semantics(
+      label: 'Step ${current + 1} of $total',
+      child: Row(
+        children: [
+          for (var i = 0; i < total; i++)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: i == total - 1 ? 0 : 6),
+                child: AnimatedContainer(
+                  duration: dur,
+                  curve: Motion.standardCurve,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: i <= current
+                        ? scheme.primary
+                        : scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -644,52 +742,59 @@ class _OptionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    return Pressable(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: title,
+      excludeSemantics: true,
       onTap: onTap,
-      pressedScale: 0.99,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primary.withValues(alpha: 0.10)
-              : scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? scheme.primary : scheme.outlineVariant,
-            width: selected ? 1.5 : 1,
+      child: Pressable(
+        onTap: onTap,
+        pressedScale: 0.99,
+        child: AnimatedContainer(
+          duration: _motion(context, Motion.fast),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.10)
+                : scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? scheme.primary : scheme.outlineVariant,
+              width: selected ? 1.5 : 1,
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: selected ? scheme.secondary : null,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 3),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      subtitle!,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                      title,
+                      style: textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: selected ? scheme.secondary : null,
                       ),
                     ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle!,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            if (selected) ...[
-              const SizedBox(width: 12),
-              Icon(Icons.check_circle_rounded, color: scheme.primary, size: 22),
+              if (selected) ...[
+                const SizedBox(width: 12),
+                Icon(Icons.check_circle_rounded, color: scheme.primary, size: 22),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -736,14 +841,64 @@ class _SearchBox extends StatelessWidget {
   }
 }
 
+/// Shown when institutes couldn't be loaded and nothing is cached yet.
+class _LoadFailed extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _LoadFailed({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.cloud_off_rounded,
+              size: 40,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 14),
+            Text("Couldn't load institutes", style: textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              'Check your internet connection and try again.\n'
+              'You can also skip for now and set this up later in Settings.',
+              textAlign: TextAlign.center,
+              style: textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _InstituteStep extends StatefulWidget {
   final bool loading;
+  final bool failed;
+  final VoidCallback onRetry;
   final List<Institute> institutes;
   final Institute? selected;
   final ValueChanged<Institute> onSelect;
 
   const _InstituteStep({
     required this.loading,
+    required this.failed,
+    required this.onRetry,
     required this.institutes,
     required this.selected,
     required this.onSelect,
@@ -772,6 +927,8 @@ class _InstituteStepState extends State<_InstituteStep> {
       subtitle: 'Shown in the header of your Topsheet.',
       child: widget.loading
           ? const Center(child: CircularProgressIndicator())
+          : widget.failed
+          ? _LoadFailed(onRetry: widget.onRetry)
           : widget.institutes.isEmpty
           ? _NotListedNotice(scheme: scheme)
           : Column(
@@ -946,25 +1103,32 @@ class _SemesterStep extends StatelessWidget {
         childAspectRatio: 1.3,
         children: semesters.map((s) {
           final isSelected = selected == s;
-          return Pressable(
+          return Semantics(
+            button: true,
+            selected: isSelected,
+            label: 'Semester $s',
+            excludeSemantics: true,
             onTap: () => onSelect(s),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? scheme.primary
-                    : scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isSelected ? scheme.primary : scheme.outlineVariant,
+            child: Pressable(
+              onTap: () => onSelect(s),
+              child: AnimatedContainer(
+                duration: _motion(context, Motion.fast),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? scheme.primary
+                      : scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isSelected ? scheme.primary : scheme.outlineVariant,
+                  ),
                 ),
-              ),
-              child: Text(
-                s,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: isSelected ? scheme.onPrimary : scheme.onSurface,
-                  fontWeight: FontWeight.w700,
+                child: Text(
+                  s,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: isSelected ? scheme.onPrimary : scheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
