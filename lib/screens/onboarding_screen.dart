@@ -926,7 +926,7 @@ class _InstituteStepState extends State<_InstituteStep> {
       title: 'Your institute?',
       subtitle: 'Shown in the header of your Topsheet.',
       child: widget.loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const _InstituteSkeleton()
           : widget.failed
           ? _LoadFailed(onRetry: widget.onRetry)
           : widget.institutes.isEmpty

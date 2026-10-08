@@ -146,7 +146,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       context: context,
       title: 'Select Department',
       items: depts,
-      labelOf: (d) => '${d.shortName} \u00b7 ${d.longName}',
+      labelOf: (d) => '${d.longName} (${d.shortName})',
       subtitleOf: (d) => 'Code ${d.code}',
     );
     if (result == null) return;

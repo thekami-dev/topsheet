@@ -262,7 +262,7 @@ class _CreateScreenState extends State<CreateScreen> with WidgetsBindingObserver
       context: context,
       title: 'Select Department',
       items: btebDepartments,
-      labelOf: (d) => '${d.shortName} — ${d.longName}',
+      labelOf: (d) => '${d.longName} (${d.shortName})',
       subtitleOf: (d) => 'Code ${d.code}',
     );
     if (result != null) {

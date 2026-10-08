@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/cupertino.dart';
@@ -7,6 +9,7 @@ import 'core/app_themes.dart';
 import 'core/motion.dart';
 import 'core/theme_reveal.dart';
 import 'data/recall_store.dart';
+import 'services/remote_data_service.dart';
 import 'screens/library_screen.dart';
 import 'screens/onboarding_screen.dart';
 
@@ -38,6 +41,10 @@ void main() async {
   ));
   await loadThemePalette();
   await loadThemePureBlack();
+  // Departments come from the cloud (cached): load them before any screen needs them.
+  await RemoteDataService.instance.ensureDepartments(waitForNetwork: false);
+  // Warm the institute list so onboarding finds it ready.
+  unawaited(RemoteDataService.instance.fetchInstitutes());
   final saved = await RecallStore.instance.themeMode();
   themeModeNotifier.value = switch (saved) {
     'light' => ThemeMode.light,
