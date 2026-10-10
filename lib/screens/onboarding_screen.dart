@@ -34,6 +34,8 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
+  static const _formCount = 5;
+
   final _pageController = PageController();
   int _step = 0; // 0 = welcome, 1..5 = form steps
 
@@ -47,38 +49,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Department? _selectedDept;
   String? _selectedSemester;
   bool _saving = false;
-
-  static const _formSteps = [
-    'Name',
-    'Index',
-    'Institute',
-    'Department',
-    'Semester',
-  ];
-
-  // Shown by the "?" button: why each step asks what it asks.
-  static const _helpTitles = [
-    'Why we ask your name',
-    'Why we ask your roll or index',
-    'Why we ask your institute',
-    'Why we ask your department',
-    'Why we ask your semester',
-  ];
-
-  static const _helpBodies = [
-    'Printed under "Submitted by" on every Topsheet, so you never retype it. '
-        'It stays on your device. You can change it anytime in '
-        'Settings > Edit profile.',
-    'Printed next to your name on the Topsheet and pre-filled whenever you '
-        'create one. Any format works.',
-    'The institute name, code, address and website go in the header of every '
-        'Topsheet. It also decides which departments you can pick next. '
-        'You can also set it up later.',
-    'Used to load the right subjects for you. They are downloaded once and '
-        'then work offline. You can also set it up later.',
-    'Pre-selects your semester when you create a Topsheet. You can still '
-        'change it each time.',
-  ];
 
   @override
   void initState() {
@@ -183,7 +153,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       return;
     }
     if (!_canProceed) return;
-    if (_formStep == _formSteps.length - 1) {
+    if (_formStep == _formCount - 1) {
       await _finish();
       return;
     }
@@ -207,21 +177,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
   }
 
-  Future<void> _skip() async {
-    HapticFeedback.mediumImpact();
-    await RecallStore.instance.skipOnboarding();
-    if (!mounted) return;
-    Navigator.of(
-      context,
-    ).pushReplacement(MaterialPageRoute(builder: (_) => const LibraryScreen()));
-  }
-
-  Future<void> _finish() async {
-    setState(() => _saving = true);
+  /// Saves whatever has been filled in. Anything left empty can be set later
+  /// in Settings > Edit profile or on the Create screen.
+  Future<void> _persist() async {
     final inst = _selectedInstitute;
     final dept = _selectedDept;
-    // Institute and department may have been left for later; they stay empty
-    // in the profile and can be set in Edit profile or on the Create screen.
     await RecallStore.instance.saveProfile(
       name: _nameCtrl.text.trim(),
       studentIndex: _indexCtrl.text.trim(),
@@ -231,46 +191,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       instituteAddress: inst?.address,
       instituteWebsite: inst?.website,
       deptCode: dept?.code,
-      semester: _selectedSemester!,
+      semester: _selectedSemester ?? '',
     );
     // Downloads keep running in the background after this screen is gone.
     if (dept != null) {
       unawaited(AppDatabase.instance.syncSubjects(dept.code, force: true));
     }
-    if (!mounted) return;
+  }
+
+  void _openLibrary() {
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => const LibraryScreen()));
   }
 
-  void _showHelp() {
-    HapticFeedback.selectionClick();
-    final i = _formStep;
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 4, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_helpTitles[i], style: theme.textTheme.titleLarge),
-                const SizedBox(height: 10),
-                Text(
-                  _helpBodies[i],
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  /// Skip keeps what the user already entered instead of throwing it away.
+  Future<void> _skip() async {
+    if (_saving) return;
+    HapticFeedback.mediumImpact();
+    setState(() => _saving = true);
+    final nothingEntered = _nameCtrl.text.trim().isEmpty &&
+        _indexCtrl.text.trim().isEmpty &&
+        _selectedInstitute == null;
+    if (nothingEntered) {
+      await RecallStore.instance.skipOnboarding();
+    } else {
+      await _persist();
+    }
+    if (!mounted) return;
+    _openLibrary();
+  }
+
+  Future<void> _finish() async {
+    setState(() => _saving = true);
+    await _persist();
+    if (!mounted) return;
+    _openLibrary();
   }
 
   @override
@@ -286,20 +242,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              _buildHeader(scheme),
+              if (!_isWelcome) _buildHeader(scheme),
               Expanded(
                 child: PageView(
                   controller: _pageController,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
                     const _WelcomeStep(),
-                    _NameStep(
+                    _TextStep(
+                      title: "What's your name?",
+                      subtitle: 'Printed under "Submitted by" on every Topsheet.',
+                      hint: 'Your full name',
                       controller: _nameCtrl,
+                      capitalization: TextCapitalization.words,
                       onChanged: () => setState(() {}),
                       onSubmit: _next,
                     ),
-                    _IndexStep(
+                    _TextStep(
+                      title: 'Your roll or index?',
+                      subtitle: 'Any format works, like 123456 or CST-M-2217.',
+                      hint: 'Roll or index',
                       controller: _indexCtrl,
+                      capitalization: TextCapitalization.characters,
                       onChanged: () => setState(() {}),
                       onSubmit: _next,
                     ),
@@ -323,38 +287,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ],
                 ),
               ),
-              if (_step == 3 || _step == 4) _buildSetupLater(scheme),
               _buildFooter(scheme),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Lets the user move on without waiting for the institute/department
-  /// lists. Both can be set later; the downloads continue in the background.
-  Widget _buildSetupLater(ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
-      child: Semantics(
-        button: true,
-        label: 'Set up institute and department later',
-        child: Pressable(
-          onTap: _saving ? null : () => _goTo(5),
-          child: SizedBox(
-            width: double.infinity,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                'Set up later',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
           ),
         ),
       ),
@@ -364,63 +298,42 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _buildHeader(ColorScheme scheme) {
     final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 12, 0),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
       child: SizedBox(
-        height: 44,
+        height: 48,
         child: Row(
           children: [
-            if (_isWelcome)
-              const Spacer()
-            else
-              Expanded(
+            Semantics(
+              button: true,
+              label: 'Back',
+              child: Pressable(
+                onTap: _saving ? null : _back,
+                child: SizedBox(
+                  width: 48,
+                  height: 48,
+                  child: Icon(Icons.arrow_back_rounded, color: scheme.onSurface),
+                ),
+              ),
+            ),
+            Expanded(
+              child: _StepBar(current: _formStep, total: _formCount),
+            ),
+            Semantics(
+              button: true,
+              label: 'Skip setup',
+              child: Pressable(
+                onTap: _saving ? null : _skip,
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 16),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Step ${_formStep + 1} of ${_formSteps.length}',
-                        style: textTheme.labelSmall,
-                      ),
-                      const SizedBox(height: 6),
-                      _StepBar(
-                        current: _formStep,
-                        total: _formSteps.length,
-                      ),
-                    ],
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
                   ),
-                ),
-              ),
-            if (!_isWelcome)
-              Semantics(
-                button: true,
-                label: 'Why we ask this',
-                child: Pressable(
-                  onTap: _showHelp,
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Icon(
-                      Icons.help_outline_rounded,
+                  child: Text(
+                    'Skip',
+                    style: textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
-                      size: 22,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                ),
-              ),
-            Pressable(
-              onTap: _saving ? null : _skip,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-                child: Text(
-                  'Skip',
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -432,87 +345,59 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildFooter(ColorScheme scheme) {
-    final isLast = !_isWelcome && _formStep == _formSteps.length - 1;
+    final isLast = !_isWelcome && _formStep == _formCount - 1;
     final enabled = (_isWelcome || _canProceed) && !_saving;
     final label = _isWelcome ? 'Get started' : (isLast ? 'Finish' : 'Continue');
     final fg = enabled ? scheme.onPrimary : scheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-      child: Row(
-        children: [
-          if (!_isWelcome) ...[
-            Semantics(
-              button: true,
-              label: 'Back',
-              child: Pressable(
-                onTap: _saving ? null : _back,
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: scheme.outlineVariant),
-                  ),
-                  child: Icon(Icons.arrow_back_rounded, color: scheme.onSurface),
-                ),
-              ),
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: label,
+        child: Pressable(
+          onTap: enabled ? _next : null,
+          child: AnimatedContainer(
+            duration: _motion(context, Motion.standard),
+            curve: Motion.standardCurve,
+            height: 56,
+            width: double.infinity,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: enabled ? scheme.primary : scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(28),
             ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: Semantics(
-              button: true,
-              enabled: enabled,
-              label: label,
-              child: Pressable(
-                onTap: enabled ? _next : null,
-                child: AnimatedContainer(
-                  duration: _motion(context, Motion.standard),
-                  curve: Motion.standardCurve,
-                  height: 56,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: enabled
-                        ? scheme.primary
-                        : scheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: _saving
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: scheme.onPrimary,
-                          ),
-                        )
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              label,
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(
-                                    color: fg,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              isLast
-                                  ? Icons.check_rounded
-                                  : Icons.arrow_forward_rounded,
-                              color: fg,
-                              size: 20,
-                            ),
-                          ],
+            child: _saving
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: scheme.onPrimary,
+                    ),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: fg,
+                          fontWeight: FontWeight.w700,
                         ),
-                ),
-              ),
-            ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(
+                        isLast
+                            ? Icons.check_rounded
+                            : Icons.arrow_forward_rounded,
+                        color: fg,
+                        size: 20,
+                      ),
+                    ],
+                  ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -556,6 +441,7 @@ class _StepBar extends StatelessWidget {
   }
 }
 
+/// First screen: just the greeting, nothing else.
 class _WelcomeStep extends StatelessWidget {
   const _WelcomeStep();
 
@@ -563,98 +449,46 @@ class _WelcomeStep extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(28, 36, 28, 16),
-      children: [
-        Text('Welcome to\nTopsheet', style: textTheme.displaySmall),
-        const SizedBox(height: 14),
-        Text(
-          'Make a clean, share-ready practical sheet in a few taps. '
-          'Set up once, and your details are ready every time.',
-          style: textTheme.bodyLarge?.copyWith(
-            color: scheme.onSurfaceVariant,
-            height: 1.5,
+    return Center(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: _motion(context, const Duration(milliseconds: 700)),
+        curve: Motion.standardCurve,
+        builder: (context, v, child) => Opacity(
+          opacity: v,
+          child: Transform.translate(
+            offset: Offset(0, 14 * (1 - v)),
+            child: child,
           ),
         ),
-        const SizedBox(height: 32),
-        const _FeatureRow(
-          icon: Icons.bolt_rounded,
-          title: 'Sheets in seconds',
-          body: 'Pick the subject, fill in the details, get a PDF.',
-        ),
-        const _FeatureRow(
-          icon: Icons.history_rounded,
-          title: 'Remembers for you',
-          body: 'Name, batch and teacher are suggested next time.',
-        ),
-        const _FeatureRow(
-          icon: Icons.cloud_off_rounded,
-          title: 'Works offline',
-          body: 'Subjects are saved for offline use, and your sheets stay on '
-              'your phone.',
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Setup is 5 quick questions and takes under a minute.',
-          style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-        ),
-      ],
-    );
-  }
-}
-
-class _FeatureRow extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String body;
-
-  const _FeatureRow({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Welcome to',
+              style: textTheme.titleLarge?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w400,
+              ),
             ),
-            child: Icon(icon, color: scheme.secondary, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: textTheme.titleMedium),
-                const SizedBox(height: 2),
-                Text(
-                  body,
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 6),
+            Text(
+              'Topsheet',
+              style: TextStyle(
+                fontFamily: 'Pacifico',
+                fontSize: 60,
+                height: 1.25,
+                color: scheme.primary,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
+/// Big title, one calm line of explanation, then the step's content.
 class _StepScaffold extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -669,20 +503,27 @@ class _StepScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 6),
+          Text(
+            title,
+            style: textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
             subtitle,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            style: textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+              height: 1.4,
+            ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
           Expanded(child: child),
         ],
       ),
@@ -690,19 +531,22 @@ class _StepScaffold extends StatelessWidget {
   }
 }
 
-/// Same filled + bordered look as the fields in the rest of the app
-/// (comes from the app-wide InputDecorationTheme).
-class _InputField extends StatelessWidget {
-  final TextEditingController controller;
+/// Name / roll step: one large line with an underline, no box around it.
+class _TextStep extends StatelessWidget {
+  final String title;
+  final String subtitle;
   final String hint;
-  final TextCapitalization textCapitalization;
+  final TextEditingController controller;
+  final TextCapitalization capitalization;
   final VoidCallback onChanged;
   final VoidCallback onSubmit;
 
-  const _InputField({
-    required this.controller,
+  const _TextStep({
+    required this.title,
+    required this.subtitle,
     required this.hint,
-    this.textCapitalization = TextCapitalization.none,
+    required this.controller,
+    required this.capitalization,
     required this.onChanged,
     required this.onSubmit,
   });
@@ -710,93 +554,86 @@ class _InputField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: TextField(
-        controller: controller,
-        autofocus: true,
-        textCapitalization: textCapitalization,
-        textInputAction: TextInputAction.next,
-        cursorColor: scheme.primary,
-        style: Theme.of(
-          context,
-        ).textTheme.titleMedium?.copyWith(fontSize: 18),
-        decoration: InputDecoration(
-          hintText: hint,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 16,
+    return _StepScaffold(
+      title: title,
+      subtitle: subtitle,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: capitalization,
+          textInputAction: TextInputAction.next,
+          cursorColor: scheme.primary,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: false,
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            border: UnderlineInputBorder(
+              borderSide: BorderSide(color: scheme.outlineVariant),
+            ),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: scheme.outlineVariant),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: scheme.primary, width: 2),
+            ),
           ),
+          onChanged: (_) => onChanged(),
+          onSubmitted: (_) => onSubmit(),
         ),
-        onChanged: (_) => onChanged(),
-        onSubmitted: (_) => onSubmit(),
       ),
     );
   }
 }
 
-class _NameStep extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onChanged;
-  final VoidCallback onSubmit;
+/// Rounded search field shared by the institute and department lists.
+class _SearchField extends StatelessWidget {
+  final String hint;
+  final ValueChanged<String> onChanged;
 
-  const _NameStep({
-    required this.controller,
-    required this.onChanged,
-    required this.onSubmit,
-  });
+  const _SearchField({required this.hint, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
-    return _StepScaffold(
-      title: "What's your name?",
-      subtitle: "We'll use this on every Topsheet you generate.",
-      child: _InputField(
-        controller: controller,
-        hint: 'Your full name',
-        textCapitalization: TextCapitalization.words,
-        onChanged: onChanged,
-        onSubmit: onSubmit,
+    final scheme = Theme.of(context).colorScheme;
+    final pill = BorderRadius.circular(28);
+    return TextField(
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search_rounded),
+        border: OutlineInputBorder(
+          borderRadius: pill,
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: pill,
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: pill,
+          borderSide: BorderSide(color: scheme.primary, width: 1.5),
+        ),
       ),
     );
   }
 }
 
-class _IndexStep extends StatelessWidget {
-  final TextEditingController controller;
-  final VoidCallback onChanged;
-  final VoidCallback onSubmit;
-
-  const _IndexStep({
-    required this.controller,
-    required this.onChanged,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepScaffold(
-      title: 'Your roll or index?',
-      subtitle: 'Any format works \u2014 numbers, or something like CST-M-2217.',
-      child: _InputField(
-        controller: controller,
-        hint: 'e.g. 123456 or CST-M-2217',
-        textCapitalization: TextCapitalization.characters,
-        onChanged: onChanged,
-        onSubmit: onSubmit,
-      ),
-    );
-  }
-}
-
-/// Selectable card used for institute and department lists.
-class _OptionCard extends StatelessWidget {
+/// One list row: plain text with a hairline under it. The selected row turns
+/// accent-coloured and shows a tick (its space is always reserved, so
+/// nothing shifts).
+class _PickRow extends StatelessWidget {
   final String title;
   final String? subtitle;
   final bool selected;
   final VoidCallback onTap;
 
-  const _OptionCard({
+  const _PickRow({
     required this.title,
     this.subtitle,
     required this.selected,
@@ -816,17 +653,14 @@ class _OptionCard extends StatelessWidget {
       child: Pressable(
         onTap: onTap,
         pressedScale: 0.99,
-        child: AnimatedContainer(
-          duration: _motion(context, Motion.fast),
-          padding: const EdgeInsets.all(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
           decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary.withValues(alpha: 0.10)
-                : scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: selected ? scheme.primary : scheme.outlineVariant,
-              width: selected ? 1.5 : 1,
+            color: Colors.transparent,
+            border: Border(
+              bottom: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.6),
+              ),
             ),
           ),
           child: Row(
@@ -838,8 +672,8 @@ class _OptionCard extends StatelessWidget {
                     Text(
                       title,
                       style: textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: selected ? scheme.secondary : null,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected ? scheme.primary : scheme.onSurface,
                       ),
                     ),
                     if (subtitle != null) ...[
@@ -854,10 +688,20 @@ class _OptionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (selected) ...[
-                const SizedBox(width: 12),
-                Icon(Icons.check_circle_rounded, color: scheme.primary, size: 22),
-              ],
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: AnimatedOpacity(
+                  opacity: selected ? 1 : 0,
+                  duration: _motion(context, Motion.fast),
+                  child: Icon(
+                    Icons.check_rounded,
+                    color: scheme.primary,
+                    size: 22,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -874,39 +718,7 @@ String? _instituteSubtitle(Institute i) {
   return parts.isEmpty ? null : parts.join(' \u00b7 ');
 }
 
-/// Removes the Android overscroll glow on onboarding lists.
-class _NoGlow extends ScrollBehavior {
-  const _NoGlow();
-
-  @override
-  Widget buildOverscrollIndicator(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) => child;
-}
-
-/// Flat search box shared by the institute and department lists.
-class _SearchBox extends StatelessWidget {
-  final String hint;
-  final ValueChanged<String> onChanged;
-
-  const _SearchBox({required this.hint, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      textInputAction: TextInputAction.search,
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        hintText: hint,
-        prefixIcon: const Icon(Icons.search_rounded),
-      ),
-    );
-  }
-}
-
-/// Shown when institutes couldn't be loaded and nothing is cached yet.
+/// Shown when institutes couldn't be loaded and nothing is saved yet.
 class _LoadFailed extends StatelessWidget {
   final VoidCallback onRetry;
 
@@ -932,7 +744,7 @@ class _LoadFailed extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Check your internet connection and try again.\n'
-              'You can also skip for now and set this up later in Settings.',
+              'Or tap Skip and finish this later in Settings.',
               textAlign: TextAlign.center,
               style: textTheme.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
@@ -947,6 +759,31 @@ class _LoadFailed extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _NotListedNotice extends StatelessWidget {
+  final ColorScheme scheme;
+  const _NotListedNotice({required this.scheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text.rich(
+      TextSpan(
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+          height: 1.5,
+        ),
+        children: const [
+          TextSpan(text: "Can't find your institute? Email "),
+          TextSpan(
+            text: 'info@thekami.tech',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          TextSpan(text: ' or join our Discord and we\u2019ll add it.'),
+        ],
       ),
     );
   }
@@ -987,75 +824,50 @@ class _InstituteStepState extends State<_InstituteStep> {
                 (i.code ?? '').toLowerCase().contains(q) ||
                 (i.address ?? '').toLowerCase().contains(q);
           }).toList();
+
+    final Widget body;
+    if (widget.loading) {
+      body = const _ListSkeleton();
+    } else if (widget.failed) {
+      body = _LoadFailed(onRetry: widget.onRetry);
+    } else if (widget.institutes.isEmpty) {
+      body = _NotListedNotice(scheme: scheme);
+    } else {
+      body = Column(
+        children: [
+          _SearchField(
+            hint: 'Search institute',
+            onChanged: (v) => setState(() => _query = v),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: ListView.builder(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              itemCount: filtered.length + 1,
+              itemBuilder: (context, i) {
+                if (i == filtered.length) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 16, 4, 16),
+                    child: _NotListedNotice(scheme: scheme),
+                  );
+                }
+                final inst = filtered[i];
+                return _PickRow(
+                  title: inst.name,
+                  subtitle: _instituteSubtitle(inst),
+                  selected: widget.selected?.id == inst.id,
+                  onTap: () => widget.onSelect(inst),
+                );
+              },
+            ),
+          ),
+        ],
+      );
+    }
     return _StepScaffold(
       title: 'Your institute?',
-      subtitle: 'Shown in the header of your Topsheet.',
-      child: widget.loading
-          ? const _InstituteSkeleton()
-          : widget.failed
-          ? _LoadFailed(onRetry: widget.onRetry)
-          : widget.institutes.isEmpty
-          ? _NotListedNotice(scheme: scheme)
-          : Column(
-              children: [
-                _SearchBox(
-                  hint: 'Search institute',
-                  onChanged: (v) => setState(() => _query = v),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: ScrollConfiguration(
-                    behavior: const _NoGlow(),
-                    child: ListView.separated(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      itemCount: filtered.length + 1,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, i) {
-                        if (i == filtered.length) {
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 6, bottom: 16),
-                            child: _NotListedNotice(scheme: scheme),
-                          );
-                        }
-                        final inst = filtered[i];
-                        return _OptionCard(
-                          title: inst.name,
-                          subtitle: _instituteSubtitle(inst),
-                          selected: widget.selected?.id == inst.id,
-                          onTap: () => widget.onSelect(inst),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-class _NotListedNotice extends StatelessWidget {
-  final ColorScheme scheme;
-  const _NotListedNotice({required this.scheme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-          height: 1.5,
-        ),
-        children: const [
-          TextSpan(text: "Can't find your institute? Email "),
-          TextSpan(
-            text: 'info@thekami.tech',
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
-          TextSpan(text: ' or join our Discord and we\u2019ll add it.'),
-        ],
-      ),
+      subtitle: 'Goes in the header of every Topsheet.',
+      child: body,
     );
   }
 }
@@ -1097,7 +909,7 @@ class _DepartmentStepState extends State<_DepartmentStep> {
           }).toList();
     return _StepScaffold(
       title: 'Your department?',
-      subtitle: 'Subjects for it are saved for offline use too.',
+      subtitle: 'Loads the right subjects, saved for offline use.',
       child: all.isEmpty
           ? Text(
               'No departments listed for this institute yet.',
@@ -1108,11 +920,11 @@ class _DepartmentStepState extends State<_DepartmentStep> {
           : Column(
               children: [
                 if (showSearch) ...[
-                  _SearchBox(
+                  _SearchField(
                     hint: 'Search department',
                     onChanged: (v) => setState(() => _query = v),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                 ],
                 Expanded(
                   child: filtered.isEmpty
@@ -1123,24 +935,19 @@ class _DepartmentStepState extends State<_DepartmentStep> {
                                 ?.copyWith(color: scheme.onSurfaceVariant),
                           ),
                         )
-                      : ScrollConfiguration(
-                          behavior: const _NoGlow(),
-                          child: ListView.separated(
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (context, i) {
-                              final d = filtered[i];
-                              return _OptionCard(
-                                title: d.longName,
-                                subtitle: '${d.shortName} \u00b7 Code ${d.code}',
-                                selected: widget.selected?.code == d.code,
-                                onTap: () => widget.onSelect(d),
-                              );
-                            },
-                          ),
+                      : ListView.builder(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          itemCount: filtered.length,
+                          itemBuilder: (context, i) {
+                            final d = filtered[i];
+                            return _PickRow(
+                              title: d.longName,
+                              subtitle: '${d.shortName} \u00b7 Code ${d.code}',
+                              selected: widget.selected?.code == d.code,
+                              onTap: () => widget.onSelect(d),
+                            );
+                          },
                         ),
                 ),
               ],
@@ -1160,59 +967,62 @@ class _SemesterStep extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return _StepScaffold(
       title: 'Current semester?',
-      subtitle: 'You can change this anytime when creating a Topsheet.',
-      child: GridView.count(
-        crossAxisCount: 4,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 10,
-        childAspectRatio: 1.3,
-        children: semesters.map((s) {
-          final isSelected = selected == s;
-          return Semantics(
-            button: true,
-            selected: isSelected,
-            label: 'Semester $s',
-            excludeSemantics: true,
-            onTap: () => onSelect(s),
-            child: Pressable(
+      subtitle: 'Pre-selected when you create a Topsheet. You can change it each time.',
+      child: SingleChildScrollView(
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: semesters.map((s) {
+            final isSelected = selected == s;
+            return Semantics(
+              button: true,
+              selected: isSelected,
+              label: 'Semester $s',
+              excludeSemantics: true,
               onTap: () => onSelect(s),
-              child: AnimatedContainer(
-                duration: _motion(context, Motion.fast),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? scheme.primary
-                      : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isSelected ? scheme.primary : scheme.outlineVariant,
+              child: Pressable(
+                onTap: () => onSelect(s),
+                child: AnimatedContainer(
+                  duration: _motion(context, Motion.fast),
+                  curve: Motion.standardCurve,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 14,
                   ),
-                ),
-                child: Text(
-                  s,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: isSelected ? scheme.onPrimary : scheme.onSurface,
-                    fontWeight: FontWeight.w700,
+                  decoration: BoxDecoration(
+                    color: isSelected ? scheme.primary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(28),
+                    border: Border.all(
+                      color: isSelected ? scheme.primary : scheme.outlineVariant,
+                    ),
+                  ),
+                  child: Text(
+                    s,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: isSelected ? scheme.onPrimary : scheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }).toList(),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
 }
 
+
 /// Placeholder rows shown while the institute list loads.
-class _InstituteSkeleton extends StatefulWidget {
-  const _InstituteSkeleton();
+class _ListSkeleton extends StatefulWidget {
+  const _ListSkeleton();
 
   @override
-  State<_InstituteSkeleton> createState() => _InstituteSkeletonState();
+  State<_ListSkeleton> createState() => _ListSkeletonState();
 }
 
-class _InstituteSkeletonState extends State<_InstituteSkeleton>
+class _ListSkeletonState extends State<_ListSkeleton>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
@@ -1238,8 +1048,9 @@ class _InstituteSkeletonState extends State<_InstituteSkeleton>
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final bar = scheme.surfaceContainerHighest;
     return Semantics(
-      label: 'Loading institutes',
+      label: 'Loading',
       child: AnimatedBuilder(
         animation: _c,
         builder: (context, _) {
@@ -1249,16 +1060,33 @@ class _InstituteSkeletonState extends State<_InstituteSkeleton>
             child: ListView(
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                for (var i = 0; i < 6; i++)
+                for (var i = 0; i < 7; i++)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Container(
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: scheme.outlineVariant),
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 14,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 14,
+                          width: 200 + (i % 3) * 40.0,
+                          decoration: BoxDecoration(
+                            color: bar,
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 10,
+                          width: 100,
+                          decoration: BoxDecoration(
+                            color: bar,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
               ],
