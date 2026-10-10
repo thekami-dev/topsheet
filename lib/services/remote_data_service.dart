@@ -1,30 +1,29 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/departments.dart';
 import '../models/institute.dart';
 
-/// Fetches institutes, departments and subjects from the topsheet-data cloud
-/// endpoint, with a local SharedPreferences cache so the app keeps working
-/// offline once the data has been downloaded. Nothing is hard-coded.
+/// Institutes, departments and subjects come from the topsheet-data cloud
+/// endpoint. Nothing is hard-coded in the app.
 ///
-/// - Cached data is returned instantly and quietly refreshed when it is
-///   older than [_maxAge].
-/// - Downloads share one connection, and a slow first attempt is backed up
-///   by a second one after [_hedgeAfter].
-/// - Only valid JSON is ever cached, so a captive-portal HTML page or a
-///   half-downloaded body can never poison the cache.
+/// - Online: the live data is shown (and saved on the phone).
+/// - Offline: the saved copy is shown.
+/// - A live download starts when the app opens and is repeated whenever a
+///   screen asks and the last one is older than [_refreshEvery]. It runs in
+///   the background, so no screen has to wait for it once a saved copy exists.
 class RemoteDataService {
   RemoteDataService._();
   static final RemoteDataService instance = RemoteDataService._();
 
-  static const _baseUrl = 'https://topsheet-data.vercel.app/data';
-  static const _timeout = Duration(seconds: 8);
-  static const _hedgeAfter = Duration(milliseconds: 2500);
-  static const _maxAge = Duration(minutes: 5);
+  static const _host = 'topsheet-data.vercel.app';
+  static const _baseUrl = 'https://$_host/data'\;
+  static const _timeout = Duration(seconds: 10);
+  static const _refreshEvery = Duration(seconds: 30);
 
   static const _institutesUrl = '$_baseUrl/institutes.json';
   static const _institutesKey = 'cache_institutes';
@@ -32,70 +31,105 @@ class RemoteDataService {
   static const _departmentsKey = 'cache_departments';
 
   final http.Client _client = http.Client();
-  final Map<String, Future<String?>> _inFlight = {};
+  Future<void>? _refreshing;
+  DateTime? _lastLive;
 
-  /// Fills the department registry. Instant when cached. With no cache it
-  /// waits for the network, unless [waitForNetwork] is false (then it only
-  /// starts the download and returns false).
-  Future<bool> ensureDepartments({bool waitForNetwork = true}) async {
-    if (DepartmentRegistry.isLoaded) return true;
+  /// Latest institutes known to the app: live data when online, otherwise
+  /// the saved copy. Null until the first copy is available. Screens can
+  /// listen to it and update themselves when live data arrives.
+  final ValueNotifier<List<Map<String, dynamic>>?> institutes =
+      ValueNotifier<List<Map<String, dynamic>>?>(null);
+
+  /// Loads the saved copies into memory. Instant, no network.
+  Future<void> loadCache() async {
     final prefs = await SharedPreferences.getInstance();
-    final cached = _validCached(prefs.getString(_departmentsKey));
-    if (cached != null && _applyDepartments(cached)) {
-      _refreshIfStale(
-        prefs,
-        _departmentsUrl,
-        _departmentsKey,
-        onFresh: _applyDepartments,
-      );
+    final depts = _validCached(prefs.getString(_departmentsKey));
+    if (depts != null) _applyDepartments(depts);
+    final inst = _validCached(prefs.getString(_institutesKey));
+    if (inst != null) _applyInstitutes(inst);
+  }
+
+  /// Downloads departments and institutes and updates the in-memory copies.
+  /// Concurrent calls share one download. Never throws.
+  Future<void> refresh() {
+    return _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+  }
+
+  Future<void> _doRefresh() async {
+    final results = await Future.wait([
+      _download(_departmentsUrl, _departmentsKey, _timeout),
+      _download(_institutesUrl, _institutesKey, _timeout),
+    ]);
+    final depts = results[0];
+    final inst = results[1];
+    // Departments first: institutes use them to order their own lists.
+    if (depts != null) _applyDepartments(depts);
+    if (inst != null) _applyInstitutes(inst);
+    if (depts != null || inst != null) _lastLive = DateTime.now();
+  }
+
+  void _refreshIfDue() {
+    final last = _lastLive;
+    if (last != null && DateTime.now().difference(last) < _refreshEvery) {
+      return;
+    }
+    unawaited(refresh());
+  }
+
+  /// Makes sure the department list is in memory. Instant when a saved copy
+  /// exists. With nothing saved it waits for the download, unless
+  /// [waitForNetwork] is false (then it only starts it and returns false).
+  Future<bool> ensureDepartments({bool waitForNetwork = true}) async {
+    if (DepartmentRegistry.isLoaded) {
+      _refreshIfDue();
       return true;
     }
-    final pending = _refresh(_departmentsUrl, _departmentsKey, _timeout).then(
-      (body) => body != null && _applyDepartments(body),
-    );
+    await loadCache();
+    if (DepartmentRegistry.isLoaded) {
+      _refreshIfDue();
+      return true;
+    }
     if (!waitForNetwork) {
-      unawaited(pending);
+      unawaited(refresh());
       return false;
     }
-    return pending;
+    await refresh();
+    return DepartmentRegistry.isLoaded;
   }
 
-  /// Valid institute rows, A-Z by name (each institute's departments are
-  /// A-Z too). Null only when nothing is cached AND the network fails.
+  /// Institutes (A-Z, each with its departments A-Z). Returns the best copy
+  /// available right now: saved copy instantly, or the live download on the
+  /// very first launch. Null only when there is nothing saved AND the
+  /// download failed.
   Future<List<Map<String, dynamic>>?> fetchInstitutes() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final cached = _validCached(prefs.getString(_institutesKey));
-    if (cached != null) {
-      await ensureDepartments(waitForNetwork: false);
-      final list = _institutesFrom(cached);
-      if (list != null) {
-        _refreshIfStale(prefs, _institutesUrl, _institutesKey);
-        return list;
-      }
+    if (institutes.value == null) await loadCache();
+    final current = institutes.value;
+    if (current != null) {
+      _refreshIfDue();
+      return current;
     }
-
-    // First run: nothing stored yet. Download both files at the same time.
-    final institutes = _refresh(_institutesUrl, _institutesKey, _timeout);
-    final departmentsOk = await ensureDepartments();
-    final body = await institutes;
-    if (!departmentsOk || body == null) return null;
-    return _institutesFrom(body);
+    // Nothing saved yet (first launch): wait for the live download.
+    await refresh();
+    if (!DepartmentRegistry.isLoaded) return null;
+    return institutes.value;
   }
 
-  /// Raw decoded JSON of `subjects/<deptCode>.json`, or null when there is
-  /// no network AND nothing cached.
+  /// Raw decoded JSON of `subjects/<deptCode>.json`: live when online,
+  /// otherwise the saved copy, otherwise null.
   Future<Object?> fetchSubjectsJson(
     int deptCode, {
     Duration timeout = _timeout,
   }) async {
     final key = 'cache_subjects_$deptCode';
+    final live = await _download(
+      '$_baseUrl/subjects/$deptCode.json',
+      key,
+      timeout,
+    );
+    if (live != null) return _decode(live);
     final prefs = await SharedPreferences.getInstance();
-    final cached = _validCached(prefs.getString(key));
-    final body =
-        await _refresh('$_baseUrl/subjects/$deptCode.json', key, timeout) ??
-        cached;
-    return body == null ? null : _decode(body);
+    final saved = _validCached(prefs.getString(key));
+    return saved == null ? null : _decode(saved);
   }
 
   bool _applyDepartments(String body) {
@@ -116,6 +150,11 @@ class RemoteDataService {
     if (list.isEmpty) return false;
     DepartmentRegistry.set(list);
     return true;
+  }
+
+  void _applyInstitutes(String body) {
+    final list = _institutesFrom(body);
+    if (list != null) institutes.value = list;
   }
 
   /// Parses, validates and sorts an institutes JSON body.
@@ -143,70 +182,8 @@ class RemoteDataService {
     return out;
   }
 
-  void _refreshIfStale(
-    SharedPreferences prefs,
-    String url,
-    String key, {
-    void Function(String body)? onFresh,
-  }) {
-    final savedAt = prefs.getInt('${key}_at') ?? 0;
-    final age = DateTime.now().millisecondsSinceEpoch - savedAt;
-    if (age <= _maxAge.inMilliseconds) return;
-    unawaited(
-      _refresh(url, key, _timeout).then((body) {
-        if (body != null) onFresh?.call(body);
-      }),
-    );
-  }
-
-  /// One shared download per key; callers asking while it runs get the same
-  /// future.
-  Future<String?> _refresh(String url, String cacheKey, Duration timeout) {
-    return _inFlight[cacheKey] ??= _downloadWithBackup(
-      url,
-      cacheKey,
-      timeout,
-    ).whenComplete(() => _inFlight.remove(cacheKey));
-  }
-
-  /// First attempt; if it is slow (or fails quickly) a second one starts and
-  /// whichever succeeds first wins.
-  Future<String?> _downloadWithBackup(
-    String url,
-    String cacheKey,
-    Duration timeout,
-  ) {
-    final result = Completer<String?>();
-    var started = 1;
-    var failures = 0;
-
-    void attempt() {
-      _download(url, cacheKey, timeout).then((body) {
-        if (result.isCompleted) return;
-        if (body != null) {
-          result.complete(body);
-          return;
-        }
-        failures++;
-        if (failures >= 2) {
-          result.complete(null);
-        } else if (started < 2) {
-          started = 2;
-          attempt();
-        }
-      });
-    }
-
-    attempt();
-    Timer(_hedgeAfter, () {
-      if (!result.isCompleted && started < 2) {
-        started = 2;
-        attempt();
-      }
-    });
-    return result.future;
-  }
-
+  /// One request. On success the body is saved on the phone and returned.
+  /// Any failure (no network, timeout, bad status, bad JSON) returns null.
   Future<String?> _download(
     String url,
     String cacheKey,
@@ -220,13 +197,8 @@ class RemoteDataService {
       if (decoded is! List && decoded is! Map) return null;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(cacheKey, body);
-      await prefs.setInt(
-        '${cacheKey}_at',
-        DateTime.now().millisecondsSinceEpoch,
-      );
       return body;
     } catch (_) {
-      // network error, timeout, DNS failure, bad body
       return null;
     }
   }

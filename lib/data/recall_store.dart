@@ -177,7 +177,7 @@ class RecallStore {
     String? instituteCode,
     String? instituteAddress,
     String? instituteWebsite,
-    required int deptCode,
+    int? deptCode,
     required String semester,
   }) async {
     final prefs = await SharedPreferences.getInstance();
@@ -188,7 +188,7 @@ class RecallStore {
     await prefs.setString('profile_instituteCode', instituteCode ?? '');
     await prefs.setString('profile_instituteAddress', instituteAddress ?? '');
     await prefs.setString('profile_instituteWebsite', instituteWebsite ?? '');
-    await prefs.setInt('profile_deptCode', deptCode);
+    if (deptCode == null) { await prefs.remove('profile_deptCode'); } else { await prefs.setInt('profile_deptCode', deptCode); }
     await prefs.setString('profile_semester', semester);
     await prefs.setBool('onboardingComplete', true);
   }

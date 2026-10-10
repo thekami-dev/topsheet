@@ -66,8 +66,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _semester = (sem == null || sem.isEmpty) ? null : sem;
       final deptCode = profile['deptCode'] as int?;
       if (deptCode != null) _department = departmentByCode(deptCode);
-      _instituteId = profile['instituteId'] as String?;
-      _instituteName = profile['instituteName'] as String?;
+      _instituteId = _blankToNull(profile['instituteId'] as String?);
+      _instituteName = _blankToNull(profile['instituteName'] as String?);
       _instCode = profile['instituteCode'] as String?;
       _instAddress = profile['instituteAddress'] as String?;
       _instWebsite = profile['instituteWebsite'] as String?;
@@ -423,3 +423,6 @@ class _FieldTile extends StatelessWidget {
     );
   }
 }
+
+/// The profile stores "" when institute/department were left for later.
+String? _blankToNull(String? v) => (v == null || v.isEmpty) ? null : v;
