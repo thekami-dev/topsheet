@@ -72,9 +72,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     'Printed next to your name on the Topsheet and pre-filled whenever you '
         'create one. Any format works.',
     'The institute name, code, address and website go in the header of every '
-        'Topsheet. It also decides which departments you can pick next.',
+        'Topsheet. It also decides which departments you can pick next. '
+        'You can also set it up later.',
     'Used to load the right subjects for you. They are downloaded once and '
-        'then work offline.',
+        'then work offline. You can also set it up later.',
     'Pre-selects your semester when you create a Topsheet. You can still '
         'change it each time.',
   ];
@@ -82,25 +83,54 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void initState() {
     super.initState();
+    // The list fills itself in as soon as data is available (saved copy
+    // first, live data when it arrives) — the screen never has to wait.
+    RemoteDataService.instance.institutes.addListener(_onInstitutesUpdated);
     _loadInstitutes();
   }
 
   @override
   void dispose() {
+    RemoteDataService.instance.institutes.removeListener(_onInstitutesUpdated);
     _pageController.dispose();
     _nameCtrl.dispose();
     _indexCtrl.dispose();
     super.dispose();
   }
 
+  void _onInstitutesUpdated() {
+    final data = RemoteDataService.instance.institutes.value;
+    if (!mounted || data == null) return;
+    final list = data.map(Institute.fromJson).toList();
+    setState(() {
+      _institutes = list;
+      _institutesFailed = false;
+      _loadingInstitutes = false;
+      // Keep the user's pick if the live list still has it.
+      final id = _selectedInstitute?.id;
+      if (id != null) {
+        final match = list.where((i) => i.id == id);
+        if (match.isNotEmpty) {
+          _selectedInstitute = match.first;
+        } else {
+          _selectedInstitute = null;
+          _selectedDept = null;
+        }
+      }
+    });
+  }
+
   Future<void> _loadInstitutes() async {
     final data = await RemoteDataService.instance.fetchInstitutes();
     if (!mounted) return;
-    setState(() {
-      _institutes = data?.map(Institute.fromJson).toList() ?? [];
-      _institutesFailed = data == null;
-      _loadingInstitutes = false;
-    });
+    if (data == null) {
+      setState(() {
+        _institutesFailed = true;
+        _loadingInstitutes = false;
+      });
+      return;
+    }
+    _onInstitutesUpdated();
   }
 
   Future<void> _retryInstitutes() async {
@@ -188,20 +218,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   Future<void> _finish() async {
     setState(() => _saving = true);
+    final inst = _selectedInstitute;
+    final dept = _selectedDept;
+    // Institute and department may have been left for later; they stay empty
+    // in the profile and can be set in Edit profile or on the Create screen.
     await RecallStore.instance.saveProfile(
       name: _nameCtrl.text.trim(),
       studentIndex: _indexCtrl.text.trim(),
-      instituteId: _selectedInstitute!.id,
-      instituteName: _selectedInstitute!.name,
-      instituteCode: _selectedInstitute!.code,
-      instituteAddress: _selectedInstitute!.address,
-      instituteWebsite: _selectedInstitute!.website,
-      deptCode: _selectedDept!.code,
+      instituteId: inst?.id ?? '',
+      instituteName: inst?.name ?? '',
+      instituteCode: inst?.code,
+      instituteAddress: inst?.address,
+      instituteWebsite: inst?.website,
+      deptCode: dept?.code,
       semester: _selectedSemester!,
     );
-    unawaited(
-      AppDatabase.instance.syncSubjects(_selectedDept!.code, force: true),
-    );
+    // Downloads keep running in the background after this screen is gone.
+    if (dept != null) {
+      unawaited(AppDatabase.instance.syncSubjects(dept.code, force: true));
+    }
     if (!mounted) return;
     Navigator.of(
       context,
@@ -288,8 +323,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ],
                 ),
               ),
+              if (_step == 3 || _step == 4) _buildSetupLater(scheme),
               _buildFooter(scheme),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Lets the user move on without waiting for the institute/department
+  /// lists. Both can be set later; the downloads continue in the background.
+  Widget _buildSetupLater(ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+      child: Semantics(
+        button: true,
+        label: 'Set up institute and department later',
+        child: Pressable(
+          onTap: _saving ? null : () => _goTo(5),
+          child: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Set up later',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ),
       ),
