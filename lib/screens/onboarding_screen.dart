@@ -329,10 +329,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     vertical: 14,
                   ),
                   child: Text(
-                    'Skip',
+                    'SKIP',
                     style: textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
                     ),
                   ),
                 ),
@@ -348,56 +349,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final isLast = !_isWelcome && _formStep == _formCount - 1;
     final enabled = (_isWelcome || _canProceed) && !_saving;
     final label = _isWelcome ? 'Get started' : (isLast ? 'Finish' : 'Continue');
-    final fg = enabled ? scheme.onPrimary : scheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-      child: Semantics(
-        button: true,
-        enabled: enabled,
+      child: _ChunkyButton(
         label: label,
-        child: Pressable(
-          onTap: enabled ? _next : null,
-          child: AnimatedContainer(
-            duration: _motion(context, Motion.standard),
-            curve: Motion.standardCurve,
-            height: 56,
-            width: double.infinity,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: enabled ? scheme.primary : scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: _saving
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: scheme.onPrimary,
-                    ),
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        label,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: fg,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        isLast
-                            ? Icons.check_rounded
-                            : Icons.arrow_forward_rounded,
-                        color: fg,
-                        size: 20,
-                      ),
-                    ],
-                  ),
-          ),
-        ),
+        enabled: enabled,
+        loading: _saving,
+        onTap: _next,
       ),
     );
   }
@@ -441,47 +399,160 @@ class _StepBar extends StatelessWidget {
   }
 }
 
-/// First screen: just the greeting, nothing else.
+/// First screen: left-aligned greeting, vertically centred.
 class _WelcomeStep extends StatelessWidget {
   const _WelcomeStep();
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Center(
+    final base = Theme.of(context).textTheme.displayMedium?.copyWith(
+      fontSize: 46,
+      height: 1.15,
+      fontWeight: FontWeight.w400,
+      color: scheme.onSurface,
+    );
+    return Align(
+      alignment: Alignment.centerLeft,
       child: TweenAnimationBuilder<double>(
         tween: Tween<double>(begin: 0, end: 1),
-        duration: _motion(context, const Duration(milliseconds: 700)),
+        duration: _motion(context, const Duration(milliseconds: 600)),
         curve: Motion.standardCurve,
         builder: (context, v, child) => Opacity(
           opacity: v,
           child: Transform.translate(
-            offset: Offset(0, 14 * (1 - v)),
+            offset: Offset(0, 12 * (1 - v)),
             child: child,
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Welcome to',
-              style: textTheme.titleLarge?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w400,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Welcome', textAlign: TextAlign.left, style: base),
+              Text('to', textAlign: TextAlign.left, style: base),
+              Text(
+                'Topsheet',
+                textAlign: TextAlign.left,
+                style: base?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Topsheet',
-              style: TextStyle(
-                fontFamily: 'Pacifico',
-                fontSize: 60,
-                height: 1.25,
-                color: scheme.primary,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Duolingo-style chunky button: solid face, darker bottom edge,
+/// presses down onto the edge when tapped.
+class _ChunkyButton extends StatefulWidget {
+  final String label;
+  final bool enabled;
+  final bool loading;
+  final VoidCallback onTap;
+
+  const _ChunkyButton({
+    required this.label,
+    required this.enabled,
+    required this.onTap,
+    this.loading = false,
+  });
+
+  @override
+  State<_ChunkyButton> createState() => _ChunkyButtonState();
+}
+
+class _ChunkyButtonState extends State<_ChunkyButton> {
+  static const double _height = 54;
+  static const double _depth = 5;
+  bool _down = false;
+
+  void _set(bool v) {
+    if (_down != v && mounted) setState(() => _down = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final enabled = widget.enabled;
+    final face = enabled ? scheme.primary : scheme.surfaceContainerHighest;
+    final edge = enabled
+        ? HSLColor.fromColor(scheme.primary)
+              .withLightness(
+                (HSLColor.fromColor(scheme.primary).lightness - 0.16)
+                    .clamp(0.0, 1.0),
+              )
+              .toColor()
+        : scheme.outlineVariant;
+    final fg = enabled ? scheme.onPrimary : scheme.onSurfaceVariant;
+    final pressed = _down && enabled;
+    final radius = BorderRadius.circular(16);
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: widget.label,
+      excludeSemantics: true,
+      onTap: enabled ? widget.onTap : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => _set(true) : null,
+        onTapUp: enabled ? (_) => _set(false) : null,
+        onTapCancel: () => _set(false),
+        onTap: enabled ? widget.onTap : null,
+        child: SizedBox(
+          height: _height + _depth,
+          width: double.infinity,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: _height,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: edge, borderRadius: radius),
+                ),
               ),
-            ),
-          ],
+              AnimatedPositioned(
+                duration: _motion(context, const Duration(milliseconds: 70)),
+                curve: Curves.easeOut,
+                left: 0,
+                right: 0,
+                top: pressed ? _depth : 0,
+                height: _height,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: face, borderRadius: radius),
+                  child: Center(
+                    child: widget.loading
+                        ? SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: scheme.onPrimary,
+                            ),
+                          )
+                        : Text(
+                            widget.label.toUpperCase(),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
+                                  color: fg,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.0,
+                                ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
