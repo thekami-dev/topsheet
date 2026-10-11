@@ -536,11 +536,11 @@ final _github = AppPalette(
 
 /// Built-in palettes, in display order. The first one is the fallback.
 final List<AppPalette> kPalettes = [
+  _tokyoNight,
   _defaultPalette,
   _catppuccin,
   _greenApple,
   _nord,
-  _tokyoNight,
   _monochrome,
   _dracula,
   _gruvbox,
@@ -579,19 +579,19 @@ PaletteColors _resolveBase(
   }
   final p = kPalettes.firstWhere(
     (p) => p.id == id,
-    orElse: () => kPalettes.first,
+    orElse: () => kPalettes.firstWhere((p) => p.id == 'tokyo_night'),
   );
   return isDark ? p.dark : p.light;
 }
 
 /// Currently selected palette id. MaterialApp listens to this.
-final themePaletteNotifier = ValueNotifier<String>('default');
+final themePaletteNotifier = ValueNotifier<String>('tokyo_night');
 
 const _kPaletteKey = 'themePalette';
 
 Future<void> loadThemePalette() async {
   final prefs = await SharedPreferences.getInstance();
-  themePaletteNotifier.value = prefs.getString(_kPaletteKey) ?? 'default';
+  themePaletteNotifier.value = prefs.getString(_kPaletteKey) ?? 'tokyo_night';
 }
 
 Future<void> applyThemePalette(String id) async {
