@@ -125,5 +125,5 @@ MIT © [Thekami](https://www.thekami.tech)
 ---
 
 <p align="center">
-  Made by <a href="https://www.thekami.tech"><img src="https://www.thekami.tech/logo.png" alt="Thekami" height="20" /></a>
+  <a href="https://www.thekami.tech"><img src="https://www.thekami.tech/logo.png" alt="Thekami" height="20" /></a>
 </p>
