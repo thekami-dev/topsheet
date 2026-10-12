@@ -5,7 +5,7 @@ import '../onboarding_motion.dart';
 import '../widgets/sheet_dots_painter.dart';
 import '../widgets/twisted_word.dart';
 
-const _blogUrl = 'https://blog.thekami.tech/posts/what-is-topsheet/'\;
+const _blogUrl = 'https://blog.thekami.tech/posts/what-is-topsheet/';
 
 /// First screen: dots gather into the Topsheet mark, then "Welcome to
 /// Topsheet" tumbles in underneath. The (i) button opens the blog post.
