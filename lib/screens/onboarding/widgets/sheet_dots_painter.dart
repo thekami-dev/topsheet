@@ -2,67 +2,91 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Floating dots that drift, link up with thin lines, and settle into a
-/// sheet of paper with a folded corner (the Topsheet mark).
+/// Tiny dots that drift around like stars, link up with faint lines, then
+/// all fly in and settle into a sheet of paper with a folded corner (the
+/// Topsheet mark).
 ///
 /// Everything is derived from [progress] (0..1), so one controller drives
 /// the whole intro and the painter never needs `setState`.
 class SheetDotsPainter extends CustomPainter {
   SheetDotsPainter({
     required this.progress,
+    required this.sheet,
     required this.primary,
     required this.muted,
   }) : super(repaint: progress);
 
   final Animation<double> progress;
+
+  /// Where the finished sheet sits (its height must be 1.25 x its width).
+  final Rect sheet;
   final Color primary;
   final Color muted;
 
-  static const double _sheetWidth = 92;
-  static const double _sheetHeight = _sheetWidth * 1.25;
-  static const double _sheetLeft = 28;
-  static const double _sheetBottomGap = 16;
-  static const double _linkDistance = 96;
-  static const int _ambientCount = 18;
+  static const double _spacing = 0.14;
+  static const double _linkDistance = 84;
+  static const int _interiorCount = 22;
 
-  /// Points that end up on the sheet, in unit space (x 0..1, y 0..1.25).
-  static const List<Offset> _marks = [
-    Offset(0, 0), // 0  top-left
-    Offset(0.68, 0), // 1  fold start
-    Offset(1, 0.32), // 2  fold end
-    Offset(1, 1.25), // 3  bottom-right
-    Offset(0, 1.25), // 4  bottom-left
-    Offset(0.68, 0.32), // 5  fold inner corner
-    Offset(0.2, 0.62), // 6  text line 1
-    Offset(0.8, 0.62), // 7
-    Offset(0.2, 0.84), // 8  text line 2
-    Offset(0.8, 0.84), // 9
-    Offset(0.2, 1.04), // 10 text line 3
-    Offset(0.55, 1.04), // 11
-    Offset(0, 0.625), // 12 left edge
-    Offset(0.5, 1.25), // 13 bottom edge
-    Offset(1, 0.785), // 14 right edge
-    Offset(0.34, 0), // 15 top edge
+  /// Lines of the sheet in unit space (x 0..1, y 0..1.25). Dots end up
+  /// evenly spaced along these; the flag says whether the end point gets
+  /// its own dot (otherwise the next segment's start provides it).
+  static const List<(Offset, Offset, bool)> _segments = [
+    (Offset(0, 0), Offset(0.68, 0), false), // top
+    (Offset(0.68, 0), Offset(1, 0.32), false), // folded corner, outer
+    (Offset(1, 0.32), Offset(1, 1.25), false), // right
+    (Offset(1, 1.25), Offset(0, 1.25), false), // bottom
+    (Offset(0, 1.25), Offset(0, 0), false), // left
+    (Offset(0.68, 0), Offset(0.68, 0.32), false), // flap, vertical
+    (Offset(0.68, 0.32), Offset(1, 0.32), false), // flap, horizontal
+    (Offset(0.2, 0.62), Offset(0.8, 0.62), true), // text line 1
+    (Offset(0.2, 0.84), Offset(0.8, 0.84), true), // text line 2
+    (Offset(0.2, 1.04), Offset(0.55, 1.04), true), // text line 3
   ];
 
-  /// Which marks get joined by a line once the dots have gathered.
-  static const List<(int, int)> _edges = [
-    (0, 1), (1, 2), (2, 3), (3, 4), (4, 0), // outline
-    (1, 5), (5, 2), // folded corner
-    (6, 7), (8, 9), (10, 11), // text lines
-  ];
+  static final List<_Star> _stars = _buildStars();
 
-  static final List<Offset> _starts = _scatter(_marks.length + _ambientCount);
-  static final List<double> _phases = _spread(_marks.length + _ambientCount);
+  static List<_Star> _buildStars() {
+    final random = math.Random(21);
+    final targets = <(Offset, bool)>[];
 
-  static List<Offset> _scatter(int n) {
-    final random = math.Random(11);
-    return List.generate(n, (_) => Offset(random.nextDouble(), random.nextDouble()));
-  }
+    for (final (a, b, includeEnd) in _segments) {
+      final n = math.max(1, ((b - a).distance / _spacing).round());
+      final count = includeEnd ? n + 1 : n;
+      for (var k = 0; k < count; k++) {
+        targets.add((Offset.lerp(a, b, k / n)!, false));
+      }
+    }
 
-  static List<double> _spread(int n) {
-    final random = math.Random(5);
-    return List.generate(n, (_) => random.nextDouble() * math.pi * 2);
+    var interior = 0;
+    var guard = 0;
+    while (interior < _interiorCount && guard++ < 500) {
+      final p = Offset(
+        0.1 + random.nextDouble() * 0.8,
+        0.12 + random.nextDouble() * 1.0,
+      );
+      if (p.dx > 0.66 && p.dy < 0.34) continue; // keep clear of the flap
+      targets.add((p, true));
+      interior++;
+    }
+
+    double between(double lo, double hi) => lo + random.nextDouble() * (hi - lo);
+    return [
+      for (final (target, inner) in targets)
+        _Star(
+          start: Offset(random.nextDouble(), random.nextDouble()),
+          target: target,
+          interior: inner,
+          phaseX: between(0, math.pi * 2),
+          phaseY: between(0, math.pi * 2),
+          freqX: between(5, 12),
+          freqY: between(5, 12),
+          amp: between(12, 26),
+          radius: between(1.1, 2.4),
+          twinkleSpeed: between(10, 26),
+          twinklePhase: between(0, math.pi * 2),
+          delay: between(0, 0.35),
+        ),
+    ];
   }
 
   static double _ease(double x) =>
@@ -71,49 +95,38 @@ class SheetDotsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final t = progress.value;
-    final show = _ease(t / 0.18); // dots fade in
-    final gather = _ease((t - 0.26) / 0.46); // dots travel to the sheet
-    final linked = _ease((t - 0.62) / 0.20); // outline draws itself
-    final filled = _ease((t - 0.78) / 0.18); // paper fills in
+    final show = _ease(t / 0.1); // stars fade in
     if (show <= 0) return;
+    final raw = ((t - 0.34) / 0.46).clamp(0.0, 1.0); // gathering window
+    final gather = _ease(raw);
+    final linked = _ease((t - 0.70) / 0.16); // outline draws itself
+    final filled = _ease((t - 0.82) / 0.14); // paper fills in
 
-    final sheet = Rect.fromLTWH(
-      _sheetLeft,
-      size.height - _sheetHeight - _sheetBottomGap,
-      _sheetWidth,
-      _sheetHeight,
-    );
-    final points = _positions(size, sheet, t, gather);
-
-    _paintProximityLinks(canvas, points, show * (1 - linked));
-    if (filled > 0) _paintPaper(canvas, points, filled);
-    if (linked > 0) _paintEdges(canvas, points, linked);
-    _paintDots(canvas, points, show, gather);
-  }
-
-  List<Offset> _positions(Size size, Rect sheet, double t, double gather) {
-    final out = List<Offset>.filled(_starts.length, Offset.zero);
-    for (var i = 0; i < _starts.length; i++) {
-      final s = _starts[i];
-      final wobble = Offset(
-        math.sin(t * 6.2 + _phases[i]),
-        math.cos(t * 5.1 + _phases[i] * 1.7),
+    final arrive = List<double>.filled(_stars.length, 0);
+    final points = List<Offset>.filled(_stars.length, Offset.zero);
+    for (var i = 0; i < _stars.length; i++) {
+      final s = _stars[i];
+      final g = _ease((raw - s.delay) / 0.65);
+      arrive[i] = g;
+      final wobble =
+          Offset(
+            math.sin(t * s.freqX + s.phaseX),
+            math.cos(t * s.freqY + s.phaseY),
+          ) *
+          (s.amp * (1 - g));
+      final from =
+          Offset(s.start.dx * size.width, s.start.dy * size.height) + wobble;
+      final to = Offset(
+        sheet.left + s.target.dx * sheet.width,
+        sheet.top + s.target.dy * sheet.width,
       );
-      final start =
-          Offset(s.dx * size.width, s.dy * size.height) +
-          wobble * (10 * (1 - gather));
-      if (i < _marks.length) {
-        final m = _marks[i];
-        final target = Offset(
-          sheet.left + m.dx * sheet.width,
-          sheet.top + m.dy * sheet.width,
-        );
-        out[i] = Offset.lerp(start, target, gather)!;
-      } else {
-        out[i] = start;
-      }
+      points[i] = Offset.lerp(from, to, g)!;
     }
-    return out;
+
+    _paintProximityLinks(canvas, points, show * (1 - gather));
+    if (filled > 0) _paintPaper(canvas, filled);
+    if (linked > 0) _paintEdges(canvas, linked);
+    _paintDots(canvas, points, arrive, t, show, filled);
   }
 
   void _paintProximityLinks(Canvas canvas, List<Offset> p, double alpha) {
@@ -126,29 +139,34 @@ class SheetDotsPainter extends CustomPainter {
         final d = (p[i] - p[j]).distance;
         if (d >= _linkDistance) continue;
         paint.color = muted.withValues(
-          alpha: 0.35 * alpha * (1 - d / _linkDistance),
+          alpha: 0.3 * alpha * (1 - d / _linkDistance),
         );
         canvas.drawLine(p[i], p[j], paint);
       }
     }
   }
 
-  void _paintPaper(Canvas canvas, List<Offset> p, double amount) {
+  Offset _onSheet(Offset unit) => Offset(
+    sheet.left + unit.dx * sheet.width,
+    sheet.top + unit.dy * sheet.width,
+  );
+
+  void _paintPaper(Canvas canvas, double amount) {
     final body = Path()
-      ..moveTo(p[0].dx, p[0].dy)
-      ..lineTo(p[1].dx, p[1].dy)
-      ..lineTo(p[2].dx, p[2].dy)
-      ..lineTo(p[3].dx, p[3].dy)
-      ..lineTo(p[4].dx, p[4].dy)
+      ..moveTo(_onSheet(const Offset(0, 0)).dx, _onSheet(const Offset(0, 0)).dy)
+      ..lineTo(_onSheet(const Offset(0.68, 0)).dx, _onSheet(const Offset(0.68, 0)).dy)
+      ..lineTo(_onSheet(const Offset(1, 0.32)).dx, _onSheet(const Offset(1, 0.32)).dy)
+      ..lineTo(_onSheet(const Offset(1, 1.25)).dx, _onSheet(const Offset(1, 1.25)).dy)
+      ..lineTo(_onSheet(const Offset(0, 1.25)).dx, _onSheet(const Offset(0, 1.25)).dy)
       ..close();
     canvas.drawPath(
       body,
       Paint()..color = primary.withValues(alpha: 0.14 * amount),
     );
     final flap = Path()
-      ..moveTo(p[1].dx, p[1].dy)
-      ..lineTo(p[5].dx, p[5].dy)
-      ..lineTo(p[2].dx, p[2].dy)
+      ..moveTo(_onSheet(const Offset(0.68, 0)).dx, _onSheet(const Offset(0.68, 0)).dy)
+      ..lineTo(_onSheet(const Offset(0.68, 0.32)).dx, _onSheet(const Offset(0.68, 0.32)).dy)
+      ..lineTo(_onSheet(const Offset(1, 0.32)).dx, _onSheet(const Offset(1, 0.32)).dy)
       ..close();
     canvas.drawPath(
       flap,
@@ -156,29 +174,73 @@ class SheetDotsPainter extends CustomPainter {
     );
   }
 
-  void _paintEdges(Canvas canvas, List<Offset> p, double amount) {
+  void _paintEdges(Canvas canvas, double amount) {
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
       ..color = primary.withValues(alpha: 0.9 * amount);
-    for (final (a, b) in _edges) {
-      canvas.drawLine(p[a], Offset.lerp(p[a], p[b], amount)!, paint);
+    for (final (a, b, _) in _segments) {
+      final from = _onSheet(a);
+      canvas.drawLine(from, Offset.lerp(from, _onSheet(b), amount)!, paint);
     }
   }
 
-  void _paintDots(Canvas canvas, List<Offset> p, double show, double gather) {
+  void _paintDots(
+    Canvas canvas,
+    List<Offset> points,
+    List<double> arrive,
+    double t,
+    double show,
+    double filled,
+  ) {
     final paint = Paint();
-    for (var i = 0; i < p.length; i++) {
-      final isMark = i < _marks.length;
-      final alpha = isMark ? show : show * (1 - gather);
-      if (alpha <= 0) continue;
-      paint.color = primary.withValues(alpha: (isMark ? 1.0 : 0.55) * alpha);
-      canvas.drawCircle(p[i], isMark ? 3.2 : 2.2, paint);
+    for (var i = 0; i < points.length; i++) {
+      final s = _stars[i];
+      final g = arrive[i];
+      final twinkle = 0.55 + 0.45 * math.sin(t * s.twinkleSpeed + s.twinklePhase);
+      var alpha = show * (twinkle * (1 - g) + g);
+      if (s.interior) alpha *= 1 - filled;
+      if (alpha <= 0.01) continue;
+      paint.color = Color.lerp(muted, primary, g)!.withValues(alpha: alpha);
+      final radius = s.radius + ((s.interior ? 1.6 : 2.8) - s.radius) * g;
+      canvas.drawCircle(points[i], radius, paint);
     }
   }
 
   @override
   bool shouldRepaint(SheetDotsPainter old) =>
-      old.primary != primary || old.muted != muted;
+      old.sheet != sheet || old.primary != primary || old.muted != muted;
+}
+
+/// One drifting dot: where it starts on screen (as a fraction), where it
+/// ends up on the sheet (unit space) and how it moves in between.
+class _Star {
+  const _Star({
+    required this.start,
+    required this.target,
+    required this.interior,
+    required this.phaseX,
+    required this.phaseY,
+    required this.freqX,
+    required this.freqY,
+    required this.amp,
+    required this.radius,
+    required this.twinkleSpeed,
+    required this.twinklePhase,
+    required this.delay,
+  });
+
+  final Offset start;
+  final Offset target;
+  final bool interior;
+  final double phaseX;
+  final double phaseY;
+  final double freqX;
+  final double freqY;
+  final double amp;
+  final double radius;
+  final double twinkleSpeed;
+  final double twinklePhase;
+  final double delay;
 }

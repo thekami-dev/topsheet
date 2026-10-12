@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../onboarding_motion.dart';
+import '../widgets/reveal_line.dart';
 import '../widgets/sheet_dots_painter.dart';
-import '../widgets/twisted_word.dart';
 
 const _blogUrl = 'https://blog.thekami.tech/posts/what-is-topsheet/';
 
-/// First screen: dots gather into the Topsheet mark, then "Welcome to
-/// Topsheet" tumbles in underneath. The (i) button opens the blog post.
+/// First screen: stars drift across the screen, then fly together into the
+/// Topsheet mark, and "Welcome to Topsheet" appears beside it. The (i)
+/// button opens the blog post.
 class WelcomeStep extends StatefulWidget {
   const WelcomeStep({super.key});
 
@@ -18,7 +19,12 @@ class WelcomeStep extends StatefulWidget {
 
 class _WelcomeStepState extends State<WelcomeStep>
     with SingleTickerProviderStateMixin {
-  static const _introLength = Duration(milliseconds: 5200);
+  static const _introLength = Duration(milliseconds: 6000);
+  static const double _sideInset = 28;
+  static const double _sheetWidth = 104;
+  static const double _sheetHeight = _sheetWidth * 1.25;
+  static const double _gap = 28;
+  static const double _titleHeight = 162;
 
   late final AnimationController _intro = AnimationController(vsync: this);
   bool _started = false;
@@ -75,60 +81,75 @@ class _WelcomeStepState extends State<WelcomeStep>
       color: scheme.primary,
     );
 
-    return Stack(
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, box) {
+        // Sheet + title sit together, centred vertically below the (i).
+        const group = _sheetHeight + _gap + _titleHeight;
+        final free = (box.maxHeight - group) / 2;
+        final top = free < 56 ? 56.0 : free;
+        final sheet = Rect.fromLTWH(_sideInset, top, _sheetWidth, _sheetHeight);
+
+        return Stack(
           children: [
-            Expanded(
+            Positioned.fill(
               child: RepaintBoundary(
                 child: CustomPaint(
-                  size: Size.infinite,
                   painter: SheetDotsPainter(
                     progress: _intro,
+                    sheet: sheet,
                     primary: scheme.primary,
                     muted: scheme.onSurfaceVariant,
                   ),
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
+            Positioned(
+              left: _sideInset,
+              right: _sideInset,
+              top: sheet.bottom + _gap,
               child: Semantics(
                 label: 'Welcome to Topsheet',
                 excludeSemantics: true,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TwistedWord(word: 'Welcome', style: base, progress: _intro),
-                    TwistedWord(
-                      word: 'to',
-                      style: base,
+                    RevealLine(
                       progress: _intro,
-                      firstIndex: 7,
+                      begin: 0.70,
+                      end: 0.86,
+                      child: Text('Welcome', style: base),
                     ),
-                    TwistedWord(
-                      word: 'Topsheet',
-                      style: brand,
+                    RevealLine(
                       progress: _intro,
-                      firstIndex: 9,
+                      begin: 0.76,
+                      end: 0.92,
+                      child: Text('to', style: base),
+                    ),
+                    RevealLine(
+                      progress: _intro,
+                      begin: 0.82,
+                      end: 1.0,
+                      child: Text('Topsheet', style: brand),
                     ),
                   ],
                 ),
               ),
             ),
+            Positioned(
+              top: 4,
+              right: 8,
+              child: IconButton(
+                tooltip: 'What is Topsheet?',
+                onPressed: _openBlog,
+                icon: Icon(
+                  Icons.info_outline_rounded,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           ],
-        ),
-        Positioned(
-          top: 4,
-          right: 8,
-          child: IconButton(
-            tooltip: 'What is Topsheet?',
-            onPressed: _openBlog,
-            icon: Icon(Icons.info_outline_rounded, color: scheme.onSurfaceVariant),
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
