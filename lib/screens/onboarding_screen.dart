@@ -8,23 +8,21 @@ import '../data/departments.dart';
 import '../data/recall_store.dart';
 import '../db/app_database.dart';
 import '../models/institute.dart';
-import '../models/topsheet_data.dart' show semesters;
 import '../services/remote_data_service.dart';
 import '../widgets/pressable.dart';
 import 'library_screen.dart';
+import 'onboarding/onboarding_motion.dart';
+import 'onboarding/steps/department_step.dart';
+import 'onboarding/steps/institute_step.dart';
+import 'onboarding/steps/semester_step.dart';
+import 'onboarding/steps/text_step.dart';
+import 'onboarding/steps/welcome_step.dart';
+import 'onboarding/widgets/chunky_button.dart';
+import 'onboarding/widgets/step_bar.dart';
 
 /* Hallmark · genre: dark-premium · macrostructure: Workbench
  * design-system: design.md · designed-as-app
  */
-
-/// Animation length that respects the OS reduce-motion flag and the app's
-/// own jank-based downgrade.
-Duration _motion(BuildContext context, Duration full) {
-  if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
-    return Duration.zero;
-  }
-  return motionTierOf(context) == MotionTier.reduced ? Motion.fast : full;
-}
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -135,7 +133,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     HapticFeedback.selectionClick();
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _step = step);
-    final d = _motion(context, Motion.slow);
+    final d = onbMotion(context, Motion.slow);
     if (d == Duration.zero) {
       _pageController.jumpToPage(step);
       return;
@@ -248,8 +246,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   controller: _pageController,
                   physics: const NeverScrollableScrollPhysics(),
                   children: [
-                    const _WelcomeStep(),
-                    _TextStep(
+                    const WelcomeStep(),
+                    TextStep(
                       title: "What's your name?",
                       subtitle: 'Printed under "Submitted by" on every Topsheet.',
                       hint: 'Your full name',
@@ -258,7 +256,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onChanged: () => setState(() {}),
                       onSubmit: _next,
                     ),
-                    _TextStep(
+                    TextStep(
                       title: 'Your roll or index?',
                       subtitle: 'Any format works, like 123456 or CST-M-2217.',
                       hint: 'Roll or index',
@@ -267,7 +265,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onChanged: () => setState(() {}),
                       onSubmit: _next,
                     ),
-                    _InstituteStep(
+                    InstituteStep(
                       loading: _loadingInstitutes,
                       failed: _institutesFailed,
                       onRetry: _retryInstitutes,
@@ -275,19 +273,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       selected: _selectedInstitute,
                       onSelect: _onInstituteSelected,
                     ),
-                    _DepartmentStep(
+                    DepartmentStep(
                       institute: _selectedInstitute,
                       selected: _selectedDept,
                       onSelect: (d) => setState(() => _selectedDept = d),
                     ),
-                    _SemesterStep(
+                    SemesterStep(
                       selected: _selectedSemester,
                       onSelect: (s) => setState(() => _selectedSemester = s),
                     ),
                   ],
                 ),
               ),
-              _buildFooter(scheme),
+              _buildFooter(),
             ],
           ),
         ),
@@ -316,7 +314,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
             Expanded(
-              child: _StepBar(current: _formStep, total: _formCount),
+              child: StepBar(current: _formStep, total: _formCount),
             ),
             Semantics(
               button: true,
@@ -345,825 +343,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildFooter(ColorScheme scheme) {
+  Widget _buildFooter() {
     final isLast = !_isWelcome && _formStep == _formCount - 1;
     final enabled = (_isWelcome || _canProceed) && !_saving;
     final label = _isWelcome ? 'Get started' : (isLast ? 'Finish' : 'Continue');
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-      child: _ChunkyButton(
+      child: ChunkyButton(
         label: label,
         enabled: enabled,
         loading: _saving,
         onTap: _next,
-      ),
-    );
-  }
-}
-
-/// Segmented progress bar: one segment per form step.
-class _StepBar extends StatelessWidget {
-  final int current;
-  final int total;
-
-  const _StepBar({required this.current, required this.total});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final dur = _motion(context, Motion.standard);
-    return Semantics(
-      label: 'Step ${current + 1} of $total',
-      child: Row(
-        children: [
-          for (var i = 0; i < total; i++)
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: i == total - 1 ? 0 : 6),
-                child: AnimatedContainer(
-                  duration: dur,
-                  curve: Motion.standardCurve,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: i <= current
-                        ? scheme.primary
-                        : scheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// First screen: left-aligned greeting, vertically centred.
-class _WelcomeStep extends StatelessWidget {
-  const _WelcomeStep();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final base = Theme.of(context).textTheme.displayMedium?.copyWith(
-      fontSize: 46,
-      height: 1.15,
-      fontWeight: FontWeight.w400,
-      color: scheme.onSurface,
-    );
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 0, end: 1),
-        duration: _motion(context, const Duration(milliseconds: 600)),
-        curve: Motion.standardCurve,
-        builder: (context, v, child) => Opacity(
-          opacity: v,
-          child: Transform.translate(
-            offset: Offset(0, 12 * (1 - v)),
-            child: child,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Welcome', textAlign: TextAlign.left, style: base),
-              Text('to', textAlign: TextAlign.left, style: base),
-              Text(
-                'Topsheet',
-                textAlign: TextAlign.left,
-                style: base?.copyWith(
-                  fontStyle: FontStyle.italic,
-                  fontWeight: FontWeight.w800,
-                  color: scheme.primary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Duolingo-style chunky button: solid face, darker bottom edge,
-/// presses down onto the edge when tapped.
-class _ChunkyButton extends StatefulWidget {
-  final String label;
-  final bool enabled;
-  final bool loading;
-  final VoidCallback onTap;
-
-  const _ChunkyButton({
-    required this.label,
-    required this.enabled,
-    required this.onTap,
-    this.loading = false,
-  });
-
-  @override
-  State<_ChunkyButton> createState() => _ChunkyButtonState();
-}
-
-class _ChunkyButtonState extends State<_ChunkyButton> {
-  static const double _height = 54;
-  static const double _depth = 5;
-  bool _down = false;
-
-  void _set(bool v) {
-    if (_down != v && mounted) setState(() => _down = v);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final enabled = widget.enabled;
-    final face = enabled ? scheme.primary : scheme.surfaceContainerHighest;
-    final edge = enabled
-        ? HSLColor.fromColor(scheme.primary)
-              .withLightness(
-                (HSLColor.fromColor(scheme.primary).lightness - 0.16)
-                    .clamp(0.0, 1.0),
-              )
-              .toColor()
-        : scheme.outlineVariant;
-    final fg = enabled ? scheme.onPrimary : scheme.onSurfaceVariant;
-    final pressed = _down && enabled;
-    final radius = BorderRadius.circular(16);
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      label: widget.label,
-      excludeSemantics: true,
-      onTap: enabled ? widget.onTap : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: enabled ? (_) => _set(true) : null,
-        onTapUp: enabled ? (_) => _set(false) : null,
-        onTapCancel: () => _set(false),
-        onTap: enabled ? widget.onTap : null,
-        child: SizedBox(
-          height: _height + _depth,
-          width: double.infinity,
-          child: Stack(
-            children: [
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: _height,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(color: edge, borderRadius: radius),
-                ),
-              ),
-              AnimatedPositioned(
-                duration: _motion(context, const Duration(milliseconds: 70)),
-                curve: Curves.easeOut,
-                left: 0,
-                right: 0,
-                top: pressed ? _depth : 0,
-                height: _height,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(color: face, borderRadius: radius),
-                  child: Center(
-                    child: widget.loading
-                        ? SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: scheme.onPrimary,
-                            ),
-                          )
-                        : Text(
-                            widget.label.toUpperCase(),
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(
-                                  color: fg,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.0,
-                                ),
-                          ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Big title, one calm line of explanation, then the step's content.
-class _StepScaffold extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final Widget child;
-
-  const _StepScaffold({
-    required this.title,
-    required this.subtitle,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: textTheme.bodyMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 28),
-          Expanded(child: child),
-        ],
-      ),
-    );
-  }
-}
-
-/// Name / roll step: one large line with an underline, no box around it.
-class _TextStep extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String hint;
-  final TextEditingController controller;
-  final TextCapitalization capitalization;
-  final VoidCallback onChanged;
-  final VoidCallback onSubmit;
-
-  const _TextStep({
-    required this.title,
-    required this.subtitle,
-    required this.hint,
-    required this.controller,
-    required this.capitalization,
-    required this.onChanged,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return _StepScaffold(
-      title: title,
-      subtitle: subtitle,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: capitalization,
-          textInputAction: TextInputAction.next,
-          cursorColor: scheme.primary,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: hint,
-            filled: false,
-            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-            border: UnderlineInputBorder(
-              borderSide: BorderSide(color: scheme.outlineVariant),
-            ),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: scheme.outlineVariant),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: scheme.primary, width: 2),
-            ),
-          ),
-          onChanged: (_) => onChanged(),
-          onSubmitted: (_) => onSubmit(),
-        ),
-      ),
-    );
-  }
-}
-
-/// Rounded search field shared by the institute and department lists.
-class _SearchField extends StatelessWidget {
-  final String hint;
-  final ValueChanged<String> onChanged;
-
-  const _SearchField({required this.hint, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final pill = BorderRadius.circular(28);
-    return TextField(
-      textInputAction: TextInputAction.search,
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        hintText: hint,
-        prefixIcon: const Icon(Icons.search_rounded),
-        border: OutlineInputBorder(
-          borderRadius: pill,
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: pill,
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: pill,
-          borderSide: BorderSide(color: scheme.primary, width: 1.5),
-        ),
-      ),
-    );
-  }
-}
-
-/// One list row: plain text with a hairline under it. The selected row turns
-/// accent-coloured and shows a tick (its space is always reserved, so
-/// nothing shifts).
-class _PickRow extends StatelessWidget {
-  final String title;
-  final String? subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PickRow({
-    required this.title,
-    this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: title,
-      excludeSemantics: true,
-      onTap: onTap,
-      child: Pressable(
-        onTap: onTap,
-        pressedScale: 0.99,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            border: Border(
-              bottom: BorderSide(
-                color: scheme.outlineVariant.withValues(alpha: 0.6),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: textTheme.bodyLarge?.copyWith(
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        color: selected ? scheme.primary : scheme.onSurface,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle!,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: AnimatedOpacity(
-                  opacity: selected ? 1 : 0,
-                  duration: _motion(context, Motion.fast),
-                  child: Icon(
-                    Icons.check_rounded,
-                    color: scheme.primary,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-String? _instituteSubtitle(Institute i) {
-  final parts = <String>[
-    if (i.code != null && i.code!.isNotEmpty) 'Code ${i.code}',
-    if (i.address != null && i.address!.isNotEmpty) i.address!,
-  ];
-  return parts.isEmpty ? null : parts.join(' \u00b7 ');
-}
-
-/// Shown when institutes couldn't be loaded and nothing is saved yet.
-class _LoadFailed extends StatelessWidget {
-  final VoidCallback onRetry;
-
-  const _LoadFailed({required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              size: 40,
-              color: scheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 14),
-            Text("Couldn't load institutes", style: textTheme.titleMedium),
-            const SizedBox(height: 6),
-            Text(
-              'Check your internet connection and try again.\n'
-              'Or tap Skip and finish this later in Settings.',
-              textAlign: TextAlign.center,
-              style: textTheme.bodyMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 18),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Try again'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NotListedNotice extends StatelessWidget {
-  final ColorScheme scheme;
-  const _NotListedNotice({required this.scheme});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-          height: 1.5,
-        ),
-        children: const [
-          TextSpan(text: "Can't find your institute? Email "),
-          TextSpan(
-            text: 'info@thekami.tech',
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
-          TextSpan(text: ' or join our Discord and we\u2019ll add it.'),
-        ],
-      ),
-    );
-  }
-}
-
-class _InstituteStep extends StatefulWidget {
-  final bool loading;
-  final bool failed;
-  final VoidCallback onRetry;
-  final List<Institute> institutes;
-  final Institute? selected;
-  final ValueChanged<Institute> onSelect;
-
-  const _InstituteStep({
-    required this.loading,
-    required this.failed,
-    required this.onRetry,
-    required this.institutes,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  @override
-  State<_InstituteStep> createState() => _InstituteStepState();
-}
-
-class _InstituteStepState extends State<_InstituteStep> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final q = _query.trim().toLowerCase();
-    final filtered = q.isEmpty
-        ? widget.institutes
-        : widget.institutes.where((i) {
-            return i.name.toLowerCase().contains(q) ||
-                (i.code ?? '').toLowerCase().contains(q) ||
-                (i.address ?? '').toLowerCase().contains(q);
-          }).toList();
-
-    final Widget body;
-    if (widget.loading) {
-      body = const _ListSkeleton();
-    } else if (widget.failed) {
-      body = _LoadFailed(onRetry: widget.onRetry);
-    } else if (widget.institutes.isEmpty) {
-      body = _NotListedNotice(scheme: scheme);
-    } else {
-      body = Column(
-        children: [
-          _SearchField(
-            hint: 'Search institute',
-            onChanged: (v) => setState(() => _query = v),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              itemCount: filtered.length + 1,
-              itemBuilder: (context, i) {
-                if (i == filtered.length) {
-                  return Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 16, 4, 16),
-                    child: _NotListedNotice(scheme: scheme),
-                  );
-                }
-                final inst = filtered[i];
-                return _PickRow(
-                  title: inst.name,
-                  subtitle: _instituteSubtitle(inst),
-                  selected: widget.selected?.id == inst.id,
-                  onTap: () => widget.onSelect(inst),
-                );
-              },
-            ),
-          ),
-        ],
-      );
-    }
-    return _StepScaffold(
-      title: 'Your institute?',
-      subtitle: 'Goes in the header of every Topsheet.',
-      child: body,
-    );
-  }
-}
-
-class _DepartmentStep extends StatefulWidget {
-  final Institute? institute;
-  final Department? selected;
-  final ValueChanged<Department> onSelect;
-
-  const _DepartmentStep({
-    required this.institute,
-    required this.selected,
-    required this.onSelect,
-  });
-
-  @override
-  State<_DepartmentStep> createState() => _DepartmentStepState();
-}
-
-class _DepartmentStepState extends State<_DepartmentStep> {
-  String _query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final all = (widget.institute?.departments ?? [])
-        .map(departmentByCode)
-        .whereType<Department>()
-        .toList();
-    // Only worth showing a search box when the list is long.
-    final showSearch = all.length > 5;
-    final q = showSearch ? _query.trim().toLowerCase() : '';
-    final filtered = q.isEmpty
-        ? all
-        : all.where((d) {
-            return d.longName.toLowerCase().contains(q) ||
-                d.shortName.toLowerCase().contains(q) ||
-                d.code.toString().contains(q);
-          }).toList();
-    return _StepScaffold(
-      title: 'Your department?',
-      subtitle: 'Loads the right subjects, saved for offline use.',
-      child: all.isEmpty
-          ? Text(
-              'No departments listed for this institute yet.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-            )
-          : Column(
-              children: [
-                if (showSearch) ...[
-                  _SearchField(
-                    hint: 'Search department',
-                    onChanged: (v) => setState(() => _query = v),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                Expanded(
-                  child: filtered.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No matches',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        )
-                      : ListView.builder(
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          itemCount: filtered.length,
-                          itemBuilder: (context, i) {
-                            final d = filtered[i];
-                            return _PickRow(
-                              title: d.longName,
-                              subtitle: '${d.shortName} \u00b7 Code ${d.code}',
-                              selected: widget.selected?.code == d.code,
-                              onTap: () => widget.onSelect(d),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-    );
-  }
-}
-
-class _SemesterStep extends StatelessWidget {
-  final String? selected;
-  final ValueChanged<String> onSelect;
-
-  const _SemesterStep({required this.selected, required this.onSelect});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return _StepScaffold(
-      title: 'Current semester?',
-      subtitle: 'Pre-selected when you create a Topsheet. You can change it each time.',
-      child: SingleChildScrollView(
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: semesters.map((s) {
-            final isSelected = selected == s;
-            return Semantics(
-              button: true,
-              selected: isSelected,
-              label: 'Semester $s',
-              excludeSemantics: true,
-              onTap: () => onSelect(s),
-              child: Pressable(
-                onTap: () => onSelect(s),
-                child: AnimatedContainer(
-                  duration: _motion(context, Motion.fast),
-                  curve: Motion.standardCurve,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 22,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected ? scheme.primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: isSelected ? scheme.primary : scheme.outlineVariant,
-                    ),
-                  ),
-                  child: Text(
-                    s,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: isSelected ? scheme.onPrimary : scheme.onSurface,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-}
-
-
-/// Placeholder rows shown while the institute list loads.
-class _ListSkeleton extends StatefulWidget {
-  const _ListSkeleton();
-
-  @override
-  State<_ListSkeleton> createState() => _ListSkeletonState();
-}
-
-class _ListSkeletonState extends State<_ListSkeleton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_motion(context, Motion.slow) == Duration.zero) {
-      _c.stop();
-    } else if (!_c.isAnimating) {
-      _c.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final bar = scheme.surfaceContainerHighest;
-    return Semantics(
-      label: 'Loading',
-      child: AnimatedBuilder(
-        animation: _c,
-        builder: (context, _) {
-          final t = Curves.easeInOut.transform(_c.value);
-          return Opacity(
-            opacity: 0.55 + 0.45 * t,
-            child: ListView(
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                for (var i = 0; i < 7; i++)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 14,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          height: 14,
-                          width: 200 + (i % 3) * 40.0,
-                          decoration: BoxDecoration(
-                            color: bar,
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 10,
-                          width: 100,
-                          decoration: BoxDecoration(
-                            color: bar,
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
