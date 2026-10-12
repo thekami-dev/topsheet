@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 
 import 'core/app_themes.dart';
+import 'core/motion.dart';
+import 'core/theme_reveal.dart';
 import 'data/recall_store.dart';
+import 'services/remote_data_service.dart';
 import 'screens/library_screen.dart';
 import 'screens/onboarding_screen.dart';
 
@@ -13,7 +18,7 @@ import 'screens/onboarding_screen.dart';
  */
 
 /// Global, app-wide theme mode. SettingsScreen updates this; MaterialApp
-/// listens via themeModeNotifier and rebuilds instantly.
+/// listens via themeModeNotifier and cross-fades to the new theme.
 final themeModeNotifier = ValueNotifier<ThemeMode>(ThemeMode.system);
 
 Future<void> applyThemeMode(String mode) async {
@@ -27,6 +32,8 @@ Future<void> applyThemeMode(String mode) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Start downloading institutes and departments right away, so the list is ready long before the user reaches the institute step.
+  unawaited(RemoteDataService.instance.fetchInstitutes());
   // Edge-to-edge: draw behind system bars, keep bars transparent.
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -36,6 +43,8 @@ void main() async {
   ));
   await loadThemePalette();
   await loadThemePureBlack();
+  // Departments come from the cloud (cached): load them before any screen needs them.
+  await RemoteDataService.instance.ensureDepartments(waitForNetwork: false);
   final saved = await RecallStore.instance.themeMode();
   themeModeNotifier.value = switch (saved) {
     'light' => ThemeMode.light,
@@ -279,6 +288,25 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
   );
 }
 
+/// How long MaterialApp's own cross-fade takes (used for light/dark and
+/// pure-black changes).
+///
+/// While a circular theme reveal is running it is zero, so the two effects
+/// never overlap. The OS "reduce motion" flag switches the fade off, and
+/// sustained jank (weak device) shortens it.
+Duration _themeMorphDuration() {
+  if (ThemeReveal.instance.running) return Duration.zero;
+  final osReduced = WidgetsBinding
+      .instance
+      .platformDispatcher
+      .accessibilityFeatures
+      .disableAnimations;
+  if (osReduced) return Duration.zero;
+  return PerformanceMonitor.instance.tier.value == MotionTier.reduced
+      ? Motion.fast
+      : Motion.slow;
+}
+
 class TopsheetApp extends StatelessWidget {
   const TopsheetApp({super.key});
 
@@ -295,12 +323,15 @@ class TopsheetApp extends StatelessWidget {
           builder: (context, _) {
             final paletteId = themePaletteNotifier.value;
             final pureBlack = themePureBlackNotifier.value;
+            final morph = _themeMorphDuration();
             return DynamicColorBuilder(
               builder: (lightDynamic, darkDynamic) {
                 return MaterialApp(
                   title: 'Topsheet',
                   debugShowCheckedModeBanner: false,
                   themeMode: mode,
+                  themeAnimationDuration: morph,
+                  themeAnimationCurve: Motion.standardCurve,
                   theme: _buildTheme(
                     isDark: false,
                     p: resolvePalette(
@@ -330,7 +361,7 @@ class TopsheetApp extends StatelessWidget {
                         statusBarIconBrightness: icons,
                         systemNavigationBarIconBrightness: icons,
                       ),
-                      child: child!,
+                      child: ThemeRevealHost(child: child!),
                     );
                   },
                   home: const _StartupGate(),
