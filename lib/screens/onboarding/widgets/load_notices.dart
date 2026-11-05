@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 
 /// Shown when institutes couldn't be loaded and nothing is saved yet.
 class LoadFailed extends StatelessWidget {
@@ -16,8 +17,8 @@ class LoadFailed extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.cloud_off_rounded,
+            HugeIcon(
+              icon: HugeIcons.strokeRoundedCloudAlert,
               size: 40,
               color: scheme.onSurfaceVariant,
             ),
@@ -36,7 +37,7 @@ class LoadFailed extends StatelessWidget {
             const SizedBox(height: 18),
             OutlinedButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
+              icon: HugeIcon(icon: HugeIcons.strokeRoundedRefresh, size: 18),
               label: const Text('Try again'),
             ),
           ],

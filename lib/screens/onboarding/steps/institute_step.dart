@@ -4,7 +4,7 @@ import '../../../models/institute.dart';
 import '../widgets/list_skeleton.dart';
 import '../widgets/load_notices.dart';
 import '../widgets/pick_row.dart';
-import '../widgets/search_field.dart';
+import '../../../widgets/search_field.dart';
 import '../widgets/step_scaffold.dart';
 
 String? _instituteSubtitle(Institute i) {

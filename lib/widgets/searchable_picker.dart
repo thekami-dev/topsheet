@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/motion.dart';
-import 'pressable.dart';
-
-/* Hallmark · genre: modern-minimal · macrostructure: Workbench
- * design-system: design.md · designed-as-app
- */
+import 'search_field.dart';
 
 Future<T?> showSearchablePicker<T>({
   required BuildContext context,
@@ -46,13 +42,9 @@ class _PickerSheet<T> extends StatefulWidget {
 class _PickerSheetState<T> extends State<_PickerSheet<T>> {
   String _query = '';
 
-  void _select(T item) {
-    Navigator.of(context).pop(item);
-  }
-
   @override
   Widget build(BuildContext context) {
-    final tier = motionTierOf(context);
+    final reduced = motionTierOf(context) == MotionTier.reduced;
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final q = _query.toLowerCase();
@@ -72,18 +64,14 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
       builder: (context, scrollController) => Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+            padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(widget.title, style: textTheme.titleLarge),
-                const SizedBox(height: 14),
-                TextField(
-                  autofocus: false,
-                  decoration: const InputDecoration(
-                    hintText: 'Search',
-                    prefixIcon: Icon(Icons.search_rounded),
-                  ),
+                const SizedBox(height: 16),
+                SearchField(
+                  hint: 'Search',
                   onChanged: (v) => setState(() => _query = v),
                 ),
               ],
@@ -92,13 +80,7 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
           const SizedBox(height: 8),
           Expanded(
             child: AnimatedSwitcher(
-              duration: tier == MotionTier.reduced
-                  ? Duration.zero
-                  : Motion.fast,
-              switchInCurve: Curves.easeOutCubic,
-              switchOutCurve: Curves.easeOutCubic,
-              transitionBuilder: (child, anim) =>
-                  FadeTransition(opacity: anim, child: child),
+              duration: reduced ? Duration.zero : Motion.fast,
               child: filtered.isEmpty
                   ? Center(
                       key: const ValueKey('empty'),
@@ -112,57 +94,22 @@ class _PickerSheetState<T> extends State<_PickerSheet<T>> {
                   : ListView.builder(
                       key: const ValueKey('list'),
                       controller: scrollController,
-                      padding: EdgeInsets.fromLTRB(
-                        16, 0, 16, 20 + MediaQuery.viewPaddingOf(context).bottom),
-                      physics: const BouncingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
+                      padding: EdgeInsets.only(
+                        bottom: 16 + MediaQuery.viewPaddingOf(context).bottom,
                       ),
                       itemCount: filtered.length,
                       itemBuilder: (context, i) {
                         final item = filtered[i];
-                        final tile = Padding(
-                          padding: EdgeInsets.only(top: i == 0 ? 2 : 8),
-                          child: Pressable(
-                            pressedScale: 0.985,
-                            onTap: () => _select(item),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: scheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: ListTile(
-                                title: Text(widget.labelOf(item)),
-                                subtitle: widget.subtitleOf != null
-                                    ? Text(widget.subtitleOf!(item))
-                                    : null,
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                              ),
-                            ),
+                        final sub = widget.subtitleOf?.call(item);
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 24,
                           ),
-                        );
-                        if (tier == MotionTier.reduced || filtered.length > 30)
-                          return tile;
-                        final start = (i * 0.06).clamp(0.0, 0.85);
-                        final curve = Interval(
-                          start,
-                          1.0,
-                          curve: Curves.easeOutCubic,
-                        );
-                        return TweenAnimationBuilder<double>(
-                          key: ValueKey(i),
-                          tween: Tween(begin: 0, end: 1),
-                          duration:
-                              Motion.standard +
-                              const Duration(milliseconds: 260),
-                          curve: curve,
-                          builder: (context, t, child) => Opacity(
-                            opacity: t,
-                            child: Transform.translate(
-                              offset: Offset(0, (1 - t) * 12),
-                              child: child,
-                            ),
-                          ),
-                          child: tile,
+                          title: Text(widget.labelOf(item)),
+                          subtitle: (sub == null || sub.isEmpty)
+                              ? null
+                              : Text(sub),
+                          onTap: () => Navigator.of(context).pop(item),
                         );
                       },
                     ),
