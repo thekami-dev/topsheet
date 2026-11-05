@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/motion.dart';
 import '../onboarding_motion.dart';
 
-/// Segmented progress bar: one segment per form step.
+/// Progress through the form steps: a Material 3 linear progress bar that
+/// glides to the new value.
 class StepBar extends StatelessWidget {
   final int current;
   final int total;
@@ -12,30 +13,18 @@ class StepBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final dur = onbMotion(context, Motion.standard);
+    final dur = onbMotion(context, Motion.slow);
     return Semantics(
       label: 'Step ${current + 1} of $total',
-      child: Row(
-        children: [
-          for (var i = 0; i < total; i++)
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: i == total - 1 ? 0 : 6),
-                child: AnimatedContainer(
-                  duration: dur,
-                  curve: Motion.standardCurve,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: i <= current
-                        ? scheme.primary
-                        : scheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-            ),
-        ],
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: (current + 1) / total),
+        duration: dur,
+        curve: Motion.standardCurve,
+        builder: (context, value, _) => LinearProgressIndicator(
+          value: value,
+          minHeight: 4,
+          borderRadius: BorderRadius.circular(2),
+        ),
       ),
     );
   }

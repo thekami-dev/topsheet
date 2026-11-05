@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:hugeicons/hugeicons.dart';
 
 import '../core/motion.dart';
 import '../data/departments.dart';
@@ -9,7 +10,6 @@ import '../data/recall_store.dart';
 import '../db/app_database.dart';
 import '../models/institute.dart';
 import '../services/remote_data_service.dart';
-import '../widgets/pressable.dart';
 import 'library_screen.dart';
 import 'onboarding/onboarding_motion.dart';
 import 'onboarding/steps/department_step.dart';
@@ -294,48 +294,29 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _buildHeader(ColorScheme scheme) {
-    final textTheme = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+      padding: const EdgeInsets.fromLTRB(4, 8, 8, 0),
       child: SizedBox(
         height: 48,
         child: Row(
           children: [
-            Semantics(
-              button: true,
-              label: 'Back',
-              child: Pressable(
-                onTap: _saving ? null : _back,
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Icon(Icons.arrow_back_rounded, color: scheme.onSurface),
-                ),
+            IconButton(
+              tooltip: 'Back',
+              onPressed: _saving ? null : _back,
+              icon: HugeIcon(
+                icon: HugeIcons.strokeRoundedArrowLeft01,
+                size: 24,
               ),
             ),
             Expanded(
-              child: StepBar(current: _formStep, total: _formCount),
-            ),
-            Semantics(
-              button: true,
-              label: 'Skip setup',
-              child: Pressable(
-                onTap: _saving ? null : _skip,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  child: Text(
-                    'SKIP',
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: StepBar(current: _formStep, total: _formCount),
               ),
+            ),
+            TextButton(
+              onPressed: _saving ? null : _skip,
+              child: const Text('Skip'),
             ),
           ],
         ),

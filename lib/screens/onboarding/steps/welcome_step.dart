@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../onboarding_motion.dart';
@@ -141,10 +142,10 @@ class _WelcomeStepState extends State<WelcomeStep>
               child: IconButton(
                 tooltip: 'What is Topsheet?',
                 onPressed: _openBlog,
-                icon: Icon(
-                  Icons.info_outline_rounded,
-                  color: scheme.onSurfaceVariant,
-                ),
+icon: HugeIcon(
+icon: HugeIcons.strokeRoundedInformationCircle,
+color: scheme.onSurfaceVariant,
+),
               ),
             ),
           ],

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../widgets/step_scaffold.dart';
 
-/// Name / roll step: one large line with an underline, no box around it.
+/// Name / roll step: a single Material 3 outlined text field.
 class TextStep extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -25,7 +25,6 @@ class TextStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return StepScaffold(
       title: title,
       subtitle: subtitle,
@@ -36,24 +35,8 @@ class TextStep extends StatelessWidget {
           autofocus: true,
           textCapitalization: capitalization,
           textInputAction: TextInputAction.next,
-          cursorColor: scheme.primary,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-          decoration: InputDecoration(
-            hintText: hint,
-            filled: false,
-            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-            border: UnderlineInputBorder(
-              borderSide: BorderSide(color: scheme.outlineVariant),
-            ),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: scheme.outlineVariant),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: scheme.primary, width: 2),
-            ),
-          ),
+          style: Theme.of(context).textTheme.titleMedium,
+          decoration: InputDecoration(labelText: hint),
           onChanged: (_) => onChanged(),
           onSubmitted: (_) => onSubmit(),
         ),
