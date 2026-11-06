@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -19,9 +18,13 @@ import '../models/institute.dart';
 import '../models/topsheet_data.dart';
 import '../pdf/topsheet_pdf.dart';
 import '../services/remote_data_service.dart';
-import '../widgets/pressable.dart';
 import '../widgets/recall_text_field.dart';
 import '../widgets/searchable_picker.dart';
+import 'package:hugeicons/hugeicons.dart';
+import 'create/create_widgets.dart';
+import 'create/generate_button.dart';
+import 'create/pdf_result_page.dart';
+import 'profile/picker_field.dart';
 
 /* Hallmark · genre: modern-minimal · macrostructure: Workbench
  * design-system: design.md · designed-as-app
@@ -36,7 +39,6 @@ Duration _motion(BuildContext context, Duration full) {
   return motionTierOf(context) == MotionTier.reduced ? Motion.fast : full;
 }
 
-enum _GenState { idle, generating, done }
 
 class CreateScreen extends StatefulWidget {
   final Map<String, dynamic>? initialData;
@@ -99,7 +101,7 @@ class _CreateScreenState extends State<CreateScreen>
     for (final id in _fieldOrder) id: GlobalKey(),
   };
 
-  _GenState _genState = _GenState.idle;
+  GenState _genState = GenState.idle;
   int _shakeSignal = 0;
   bool _showHint = false;
   bool _loadingSubjects = false;
@@ -550,7 +552,7 @@ class _CreateScreenState extends State<CreateScreen>
   }
 
   Future<void> _generatePdf() async {
-    if (_genState != _GenState.idle) return;
+    if (_genState != GenState.idle) return;
     FocusManager.instance.primaryFocus?.unfocus();
     _syncTextFields();
     if (!_validate()) {
@@ -562,7 +564,7 @@ class _CreateScreenState extends State<CreateScreen>
       _toast('Fill in the highlighted fields');
       return;
     }
-    setState(() => _genState = _GenState.generating);
+    setState(() => _genState = GenState.generating);
     try {
       final bytes = await generateTopsheetPdf(_data);
 
@@ -607,15 +609,15 @@ class _CreateScreenState extends State<CreateScreen>
       });
 
       HapticFeedback.mediumImpact();
-      setState(() => _genState = _GenState.done);
+      setState(() => _genState = GenState.done);
       await Future.delayed(const Duration(milliseconds: 900));
-      if (mounted) setState(() => _genState = _GenState.idle);
+      if (mounted) setState(() => _genState = GenState.idle);
       if (mounted) await _showPdfSheet(bytes, displayName.trim());
     } catch (_) {
       if (mounted) _toast("Couldn't create the PDF. Please try again.");
     } finally {
-      if (mounted && _genState == _GenState.generating) {
-        setState(() => _genState = _GenState.idle);
+      if (mounted && _genState == GenState.generating) {
+        setState(() => _genState = GenState.idle);
       }
     }
   }
@@ -674,17 +676,13 @@ class _CreateScreenState extends State<CreateScreen>
   Future<void> _showPdfSheet(Uint8List bytes, String name) {
     final title = name.isEmpty ? 'Topsheet' : name;
     return Navigator.of(context).push(
-      PageRouteBuilder(
-        transitionDuration: _motion(context, Motion.slow),
-        pageBuilder: (ctx, anim, secAnim) => FadeTransition(
-          opacity: anim,
-          child: _PdfResultPage(
-            bytes: bytes,
-            title: title,
-            fileName: _pdfFileNameFor(title),
-            onShare: () => _sharePdf(bytes, title),
-            onSave: () => _savePdf(bytes, title),
-          ),
+      MaterialPageRoute(
+        builder: (_) => PdfResultPage(
+          bytes: bytes,
+          title: title,
+          fileName: _pdfFileNameFor(title),
+          onShare: () => _sharePdf(bytes, title),
+          onSave: () => _savePdf(bytes, title),
         ),
       ),
     );
@@ -732,17 +730,14 @@ class _CreateScreenState extends State<CreateScreen>
           ? const SizedBox(width: double.infinity)
           : Container(
               width: double.infinity,
+              color: scheme.surface,
               padding: EdgeInsets.fromLTRB(
                 16,
                 10,
                 16,
                 12 + MediaQuery.viewPaddingOf(context).bottom,
               ),
-              decoration: BoxDecoration(
-                color: scheme.surface,
-                border: Border(top: BorderSide(color: scheme.outlineVariant)),
-              ),
-              child: _GenerateButton(
+              child: GenerateButton(
                 state: _genState,
                 onPressed: _generatePdf,
                 shakeSignal: _shakeSignal,
@@ -798,7 +793,7 @@ class _CreateScreenState extends State<CreateScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _ProgressCard(
+                    CreateHeader(
                       subject: _data.subject?.name,
                       filled: filled,
                       total: _requiredCount,
@@ -810,7 +805,7 @@ class _CreateScreenState extends State<CreateScreen>
                       child: _showHint
                           ? Padding(
                               padding: const EdgeInsets.only(top: 14),
-                              child: _HintBanner(
+                              child: HintBanner(
                                 onDismiss: () {
                                   RecallStore.instance.markHintSeen();
                                   setState(() => _showHint = false);
@@ -819,248 +814,204 @@ class _CreateScreenState extends State<CreateScreen>
                             )
                           : const SizedBox(width: double.infinity),
                     ),
-                    const SizedBox(height: 20),
-                    _Section(
+                    const SizedBox(height: 28),
+                    FormSection(
                       title: 'Course',
-                      icon: Icons.menu_book_rounded,
                       done: courseDone,
                       total: 3,
                       children: [
-                        _Field(
+                        PickerField(
                           label: 'Institute',
-                          child: _PickerTile(
-                            value: _data.instituteName.isEmpty
-                                ? null
-                                : _data.instituteName,
-                            placeholder: 'Select institute',
-                            onTap: _pickInstitute,
-                          ),
+                          value: _data.instituteName.isEmpty
+                              ? null
+                              : _data.instituteName,
+                          onTap: _pickInstitute,
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['department'],
-                          child: _Field(
+                          child: PickerField(
                             label: 'Department',
-                            child: _PickerTile(
-                              value: _data.department == null
-                                  ? null
-                                  : '${_data.department!.longName} (${_data.department!.shortName})',
-                              placeholder: 'Select department',
-                              onTap: _pickDepartment,
-                              errorText: _errors['department'],
-                            ),
+                            value: _data.department == null
+                                ? null
+                                : '${_data.department!.longName} (${_data.department!.shortName})',
+                            errorText: _errors['department'],
+                            onTap: _pickDepartment,
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['semester'],
-                          child: _Field(
+                          child: PickerField(
                             label: 'Semester',
-                            child: _PickerTile(
-                              value: _data.semester.isEmpty
-                                  ? null
-                                  : _data.semester,
-                              placeholder: 'Select semester',
-                              onTap: _pickSemester,
-                              errorText: _errors['semester'],
-                            ),
+                            value: _data.semester.isEmpty
+                                ? null
+                                : _data.semester,
+                            errorText: _errors['semester'],
+                            onTap: _pickSemester,
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['subject'],
-                          child: _Field(
-                            label: 'Subject',
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _PickerTile(
-                                  value: _data.subject?.name,
-                                  placeholder: subjectReady
-                                      ? 'Select subject'
-                                      : 'Choose department and semester first',
-                                  onTap: subjectReady && !_loadingSubjects
-                                      ? _pickSubject
-                                      : null,
-                                  loading: _loadingSubjects,
-                                  errorText: _errors['subject'],
-                                ),
-                                if (_subjectNote != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: _SubjectNote(
-                                      message: _subjectNote!,
-                                      onRetry: _subjectNoteRetry
-                                          ? () =>
-                                                _pickSubject(forceDownload: true)
-                                          : null,
-                                    ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              PickerField(
+                                label: 'Subject',
+                                value: _data.subject?.name,
+                                enabled: subjectReady,
+                                disabledHint:
+                                    'Choose department and semester first',
+                                loading: _loadingSubjects,
+                                errorText: _errors['subject'],
+                                onTap: _pickSubject,
+                              ),
+                              if (_subjectNote != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: SubjectNote(
+                                    message: _subjectNote!,
+                                    onRetry: _subjectNoteRetry
+                                        ? () => _pickSubject(forceDownload: true)
+                                        : null,
                                   ),
-                              ],
-                            ),
+                                ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    _Section(
+                    const SizedBox(height: 32),
+                    FormSection(
                       title: 'Experiment',
-                      icon: Icons.science_rounded,
                       done: experimentDone,
                       total: 4,
                       children: [
                         KeyedSubtree(
                           key: _fieldKeys['exptNo'],
-                          child: _Field(
-                            label: 'Experiment no.',
-                            child: _TextInput(
-                              controller: _exptNoCtrl,
-                              hint: 'e.g. 3',
-                              keyboardType: TextInputType.number,
+                          child: TextField(
+                            controller: _exptNoCtrl,
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Experiment no.',
+                              hintText: 'e.g. 3',
                               errorText: _errors['exptNo'],
                             ),
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['exptName'],
-                          child: _Field(
+                          child: RecallTextField(
+                            field: 'exptName',
                             label: 'Experiment name',
-                            child: RecallTextField(
-                              field: 'exptName',
-                              label: 'Name of the experiment',
-                              controller: _exptNameCtrl,
-                              errorText: _errors['exptName'],
-                            ),
+                            controller: _exptNameCtrl,
+                            errorText: _errors['exptName'],
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['dateOfExpt'],
-                          child: _Field(
+                          child: PickerField(
                             label: 'Date of experiment',
-                            child: _PickerTile(
-                              value: _data.dateOfExpt == null
-                                  ? null
-                                  : _df.format(_data.dateOfExpt!),
-                              placeholder: 'Select date',
-                              trailing: Icons.calendar_today_rounded,
-                              onTap: () => _pickDate(isSubmission: false),
-                              errorText: _errors['dateOfExpt'],
-                            ),
+                            value: _data.dateOfExpt == null
+                                ? null
+                                : _df.format(_data.dateOfExpt!),
+                            icon: HugeIcons.strokeRoundedCalendar01,
+                            errorText: _errors['dateOfExpt'],
+                            onTap: () => _pickDate(isSubmission: false),
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['submissionDate'],
-                          child: _Field(
+                          child: PickerField(
                             label: 'Submission date',
-                            child: _PickerTile(
-                              value: _data.submissionDate == null
-                                  ? null
-                                  : _df.format(_data.submissionDate!),
-                              placeholder: 'Select date',
-                              trailing: Icons.calendar_today_rounded,
-                              onTap: () => _pickDate(isSubmission: true),
-                              errorText: _errors['submissionDate'],
-                            ),
+                            value: _data.submissionDate == null
+                                ? null
+                                : _df.format(_data.submissionDate!),
+                            icon: HugeIcons.strokeRoundedCalendar01,
+                            errorText: _errors['submissionDate'],
+                            onTap: () => _pickDate(isSubmission: true),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    _Section(
+                    const SizedBox(height: 32),
+                    FormSection(
                       title: 'Student',
-                      icon: Icons.school_rounded,
                       done: studentDone,
                       total: 4,
                       children: [
                         KeyedSubtree(
                           key: _fieldKeys['studentName'],
-                          child: _Field(
+                          child: RecallTextField(
+                            field: 'studentName',
                             label: 'Student name',
-                            child: RecallTextField(
-                              field: 'studentName',
-                              label: 'Full name',
-                              controller: _studentNameCtrl,
-                              errorText: _errors['studentName'],
-                              onSelected: _fillStudentProfile,
-                            ),
+                            controller: _studentNameCtrl,
+                            errorText: _errors['studentName'],
+                            onSelected: _fillStudentProfile,
                           ),
                         ),
-                  KeyedSubtree(
+                        KeyedSubtree(
                           key: _fieldKeys['studentIndex'],
-                          child: _Field(
+                          child: RecallTextField(
+                            field: 'studentIndex',
                             label: 'Student index',
-                            child: RecallTextField(
-                              field: 'studentIndex',
-                              label: 'Roll or index',
-                              controller: _studentIndexCtrl,
-                              errorText: _errors['studentIndex'],
-                            ),
+                            controller: _studentIndexCtrl,
+                            errorText: _errors['studentIndex'],
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['boardRoll'],
-                          child: _Field(
-                            label: 'Board roll',
-                            child: _TextInput(
-                              controller: _boardRollCtrl,
-                              hint: 'Board roll number',
-                              keyboardType: TextInputType.number,
+                          child: TextField(
+                            controller: _boardRollCtrl,
+                            keyboardType: TextInputType.number,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'Board roll',
                               errorText: _errors['boardRoll'],
                             ),
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['batch'],
-                          child: _Field(
+                          child: RecallTextField(
+                            field: 'batch',
                             label: 'Batch',
-                            child: RecallTextField(
-                              field: 'batch',
-                              label: 'Batch or session',
-                              controller: _batchCtrl,
-                              errorText: _errors['batch'],
-                            ),
+                            controller: _batchCtrl,
+                            errorText: _errors['batch'],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    _Section(
+                    const SizedBox(height: 32),
+                    FormSection(
                       title: 'Teacher',
-                      icon: Icons.badge_rounded,
                       done: teacherDone,
                       total: 3,
                       children: [
                         KeyedSubtree(
                           key: _fieldKeys['teacherName'],
-                          child: _Field(
+                          child: RecallTextField(
+                            field: 'teacherName',
                             label: 'Teacher name',
-                            child: RecallTextField(
-                              field: 'teacherName',
-                              label: 'Full name',
-                              controller: _teacherNameCtrl,
-                              errorText: _errors['teacherName'],
-                            ),
+                            controller: _teacherNameCtrl,
+                            errorText: _errors['teacherName'],
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['teacherRole'],
-                          child: _Field(
+                          child: RecallTextField(
+                            field: 'teacherRole',
                             label: 'Teacher role',
-                            child: RecallTextField(
-                              field: 'teacherRole',
-                              label: 'Designation',
-                              controller: _teacherRoleCtrl,
-                              errorText: _errors['teacherRole'],
-                            ),
+                            controller: _teacherRoleCtrl,
+                            errorText: _errors['teacherRole'],
                           ),
                         ),
                         KeyedSubtree(
                           key: _fieldKeys['teacherDepartment'],
-                          child: _Field(
+                          child: RecallTextField(
+                            field: 'teacherDepartment',
                             label: 'Teacher department',
-                            child: RecallTextField(
-                              field: 'teacherDepartment',
-                              label: 'Department',
-                              controller: _teacherDeptCtrl,
-                              errorText: _errors['teacherDepartment'],
-                            ),
+                            controller: _teacherDeptCtrl,
+                            errorText: _errors['teacherDepartment'],
                           ),
                         ),
                       ],
@@ -1072,720 +1023,6 @@ class _CreateScreenState extends State<CreateScreen>
             _buildBottomBar(scheme),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Top card: the chosen subject (or a placeholder) and how much of the form
-/// is filled in.
-class _ProgressCard extends StatelessWidget {
-  final String? subject;
-  final int filled;
-  final int total;
-
-  const _ProgressCard({
-    required this.subject,
-    required this.filled,
-    required this.total,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final complete = filled >= total;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  subject ?? 'New topsheet',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: textTheme.titleLarge,
-                ),
-              ),
-              if (complete) ...[
-                const SizedBox(width: 8),
-                Icon(Icons.check_circle_rounded, color: scheme.primary),
-              ],
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            complete
-                ? 'Everything is filled in. Ready to generate.'
-                : '$filled of $total required fields filled',
-            style: textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: filled / total),
-            duration: _motion(context, Motion.standard),
-            curve: Motion.standardCurve,
-            builder: (context, value, _) => ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: value,
-                minHeight: 6,
-                backgroundColor: scheme.outlineVariant,
-                color: scheme.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-/// A titled group of fields with a small "2/4" or "Done" indicator.
-class _Section extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final int done;
-  final int total;
-  final List<Widget> children;
-
-  const _Section({
-    required this.title,
-    required this.icon,
-    required this.done,
-    required this.total,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final complete = done >= total;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
-          child: Row(
-            children: [
-              Container(
-                width: 26,
-                height: 26,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 15, color: scheme.primary),
-              ),
-              const SizedBox(width: 10),
-              Text(title, style: textTheme.titleMedium),
-              const Spacer(),
-              if (complete) ...[
-                Icon(Icons.check_circle_rounded, size: 16, color: scheme.primary),
-                const SizedBox(width: 4),
-                Text(
-                  'Done',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: scheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ] else
-                Text(
-                  '$done/$total',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) const SizedBox(height: 16),
-                children[i],
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Field with its name always visible above it.
-class _Field extends StatelessWidget {
-  final String label;
-  final Widget child;
-
-  const _Field({required this.label, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 6),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: scheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        child,
-      ],
-    );
-  }
-}
-
-class _TextInput extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final TextInputType? keyboardType;
-  final String? errorText;
-
-  const _TextInput({
-    required this.controller,
-    required this.hint,
-    this.keyboardType,
-    this.errorText,
-  });
-
-  @override
-  Widget build(BuildContext context) => TextField(
-    controller: controller,
-    keyboardType: keyboardType,
-    textInputAction: TextInputAction.next,
-    decoration: InputDecoration(hintText: hint, errorText: errorText),
-  );
-}
-
-/// Tappable field that opens a picker. Shows a spinner while [loading] and
-/// a red outline plus message when [errorText] is set.
-class _PickerTile extends StatelessWidget {
-  final String? value;
-  final String placeholder;
-  final VoidCallback? onTap;
-  final bool loading;
-  final String? errorText;
-  final IconData trailing;
-
-  const _PickerTile({
-    required this.value,
-    required this.placeholder,
-    required this.onTap,
-    this.loading = false,
-    this.errorText,
-    this.trailing = Icons.keyboard_arrow_down_rounded,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final enabled = onTap != null || loading;
-    final hasError = errorText != null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Semantics(
-          button: true,
-          enabled: onTap != null,
-          label: value ?? placeholder,
-          excludeSemantics: true,
-          onTap: onTap,
-          child: Pressable(
-            pressedScale: 0.99,
-            onTap: onTap,
-            child: AnimatedOpacity(
-              opacity: enabled ? 1 : 0.55,
-              duration: _motion(context, Motion.fast),
-              child: AnimatedContainer(
-                duration: _motion(context, Motion.fast),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 15,
-                ),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: hasError ? scheme.error : Colors.transparent,
-                    width: hasError ? 1.5 : 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        value ?? placeholder,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodyLarge?.copyWith(
-                          color: value == null
-                              ? scheme.onSurfaceVariant
-                              : scheme.onSurface,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (loading)
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: scheme.primary,
-                        ),
-                      )
-                    else
-                      Icon(trailing, size: 20, color: scheme.onSurfaceVariant),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (hasError)
-          Padding(
-            padding: const EdgeInsets.only(top: 6, left: 4),
-            child: Text(
-              errorText!,
-              style: textTheme.bodySmall?.copyWith(color: scheme.error),
-            ),
-          ),
-      ],
-    );
-  }
-}
-/// Explains why the subject list is empty, with Retry when the cause may be
-/// the connection.
-class _SubjectNote extends StatelessWidget {
-  final String message;
-  final VoidCallback? onRetry;
-
-  const _SubjectNote({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: scheme.error.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(Icons.info_outline_rounded, size: 18, color: scheme.error),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: textTheme.bodySmall?.copyWith(
-                color: scheme.onSurface,
-                height: 1.35,
-              ),
-            ),
-          ),
-          if (onRetry != null)
-            TextButton(
-              onPressed: onRetry,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-              ),
-              child: const Text('Retry'),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Full-width Generate button: idle -> spinner -> check, with a shake when
-/// the form has errors.
-class _GenerateButton extends StatefulWidget {
-  final _GenState state;
-  final VoidCallback onPressed;
-  final int shakeSignal;
-
-  const _GenerateButton({
-    required this.state,
-    required this.onPressed,
-    required this.shakeSignal,
-  });
-
-  @override
-  State<_GenerateButton> createState() => _GenerateButtonState();
-}
-
-class _GenerateButtonState extends State<_GenerateButton>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _shake = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 260),
-  );
-
-  @override
-  void didUpdateWidget(_GenerateButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final reduced =
-        (MediaQuery.maybeOf(context)?.disableAnimations ?? false) ||
-        motionTierOf(context) == MotionTier.reduced;
-    if (widget.shakeSignal != oldWidget.shakeSignal && !reduced) {
-      _shake.forward(from: 0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _shake.dispose();
-    super.dispose();
-  }
-
-  static double _offsetFor(double t) {
-    // 3 decaying half-cycles, settling back to 0 by t=1.
-    if (t >= 1) return 0;
-    final decay = 1 - t;
-    return math.sin(t * math.pi * 3) * decay;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final label = switch (widget.state) {
-      _GenState.idle => 'Generate PDF',
-      _GenState.generating => 'Creating PDF\u2026',
-      _GenState.done => 'Saved',
-    };
-    final icon = switch (widget.state) {
-      _GenState.idle => Icon(
-        Icons.picture_as_pdf_rounded,
-        key: const ValueKey('idle'),
-        size: 20,
-        color: scheme.onPrimary,
-      ),
-      _GenState.generating => SizedBox(
-        key: const ValueKey('spin'),
-        width: 18,
-        height: 18,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: scheme.onPrimary,
-        ),
-      ),
-      _GenState.done => Icon(
-        Icons.check_rounded,
-        key: const ValueKey('done'),
-        size: 20,
-        color: scheme.onPrimary,
-      ),
-    };
-    return AnimatedBuilder(
-      animation: _shake,
-      builder: (context, child) => Transform.translate(
-        offset: Offset(8 * _offsetFor(_shake.value), 0),
-        child: child,
-      ),
-      child: Pressable(
-        onTap: widget.state == _GenState.idle ? widget.onPressed : null,
-        child: Container(
-          height: 56,
-          width: double.infinity,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: scheme.primary,
-            borderRadius: BorderRadius.circular(28),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedSwitcher(
-                duration: _motion(context, Motion.standard),
-                reverseDuration: _motion(context, Motion.fast),
-                switchInCurve: Curves.easeOutBack,
-                switchOutCurve: Curves.easeOutCubic,
-                transitionBuilder: (child, anim) =>
-                    ScaleTransition(scale: anim, child: child),
-                child: icon,
-              ),
-              const SizedBox(width: 10),
-              AnimatedSwitcher(
-                duration: _motion(context, Motion.fast),
-                child: Text(
-                  label,
-                  key: ValueKey(label),
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: scheme.onPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-class _HintBanner extends StatelessWidget {
-  final VoidCallback onDismiss;
-  const _HintBanner({required this.onDismiss});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 10, 13),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 34,
-              height: 34,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(11),
-                boxShadow: [
-                  BoxShadow(
-                    color: scheme.primary.withValues(alpha: 0.35),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.auto_awesome_rounded,
-                size: 17,
-                color: scheme.onPrimary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Text.rich(
-                  TextSpan(
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurface,
-                      height: 1.3,
-                    ),
-                    children: const [
-                      TextSpan(
-                        text: 'Fill it once \u2014 ',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      TextSpan(
-                        text: 'generate, preview, and share in one flow.',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Pressable(
-              onTap: onDismiss,
-              child: Padding(
-                padding: const EdgeInsets.all(6),
-                child: Icon(
-                  Icons.close_rounded,
-                  size: 18,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PdfResultPage extends StatelessWidget {
-  final Uint8List bytes;
-  final String title;
-  final String fileName;
-  final VoidCallback onShare;
-  final VoidCallback onSave;
-
-  const _PdfResultPage({
-    required this.bytes,
-    required this.title,
-    required this.fileName,
-    required this.onShare,
-    required this.onSave,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      appBar: AppBar(
-        backgroundColor: scheme.surface,
-        elevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.close_rounded),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            Text(
-              'Ready to share',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: PdfPreview(
-              build: (format) async => bytes,
-              canChangeOrientation: false,
-              canChangePageFormat: false,
-              canDebug: false,
-              useActions: false,
-              previewPageMargin: const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
-              maxPageWidth: 680,
-              scrollViewDecoration: BoxDecoration(color: scheme.surface),
-              pdfPreviewPageDecoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(3),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.28),
-                    blurRadius: 22,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              loadingWidget: Center(
-                child: CircularProgressIndicator(color: scheme.primary),
-              ),
-              allowSharing: false,
-              allowPrinting: false,
-              pdfFileName: fileName,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              border: Border(top: BorderSide(color: scheme.outlineVariant)),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: Pressable(
-                        onTap: onSave,
-                        child: Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: scheme.primary, width: 1.6),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.download_rounded, size: 19, color: scheme.primary),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Save',
-                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: Pressable(
-                        onTap: onShare,
-                        child: Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: scheme.primary,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.share_rounded, size: 19, color: scheme.onPrimary),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Share',
-                                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  color: scheme.onPrimary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

@@ -117,7 +117,7 @@ class _RecallTextFieldState extends State<RecallTextField> {
           focusNode: focusNode,
           keyboardType: widget.keyboardType,
           decoration: InputDecoration(
-            hintText: widget.label,
+            labelText: widget.label,
             errorText: widget.errorText,
           ),
         );
