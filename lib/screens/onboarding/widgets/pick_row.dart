@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:hugeicons/hugeicons.dart';
 
-import '../../../core/motion.dart';
-import '../../../widgets/pressable.dart';
-import '../onboarding_motion.dart';
-
-/// One list row: plain text with a hairline under it. The selected row turns
-/// accent-coloured and shows a tick (its space is always reserved, so
-/// nothing shifts).
+/// One selectable list row (Material 3 list item). The selected row gets a
+/// secondary-container background and a tick; the tick's space is always
+/// reserved so nothing shifts.
 class PickRow extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -24,68 +21,28 @@ class PickRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: title,
-      excludeSemantics: true,
-      onTap: onTap,
-      child: Pressable(
-        onTap: onTap,
-        pressedScale: 0.99,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            border: Border(
-              bottom: BorderSide(
-                color: scheme.outlineVariant.withValues(alpha: 0.6),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: textTheme.bodyLarge?.copyWith(
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        color: selected ? scheme.primary : scheme.onSurface,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle!,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: AnimatedOpacity(
-                  opacity: selected ? 1 : 0,
-                  duration: onbMotion(context, Motion.fast),
-                  child: Icon(
-                    Icons.check_rounded,
-                    color: scheme.primary,
-                    size: 22,
-                  ),
-                ),
-              ),
-            ],
-          ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: ListTile(
+        selected: selected,
+        selectedColor: scheme.onSecondaryContainer,
+        selectedTileColor: scheme.secondaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        title: Text(title),
+        subtitle: subtitle == null ? null : Text(subtitle!),
+        trailing: SizedBox(
+          width: 24,
+          height: 24,
+          child: selected
+              ? HugeIcon(
+                  icon: HugeIcons.strokeRoundedTick02,
+                  size: 22,
+                  color: scheme.onSecondaryContainer,
+                )
+              : null,
         ),
+        onTap: onTap,
       ),
     );
   }

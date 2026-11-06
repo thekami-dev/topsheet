@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Big title, one calm line of explanation, then the step's content.
+/// Headline, one calm line of explanation, then the step's content.
 class StepScaffold extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -22,12 +22,7 @@ class StepScaffold extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: textTheme.headlineMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text(title, style: textTheme.headlineMedium),
           const SizedBox(height: 8),
           Text(
             subtitle,

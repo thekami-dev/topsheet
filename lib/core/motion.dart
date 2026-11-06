@@ -67,12 +67,13 @@ SpringDescription appleSpring({double damping = 1.0, double response = 0.4}) {
   return SpringDescription(mass: 1, stiffness: stiffness, damping: dampingCoefficient);
 }
 
-/// Standard durations, kept short — a spring's *feel* comes from damping,
-/// this only bounds the fallback cross-fade used at [MotionTier.reduced].
+/// Material 3 motion tokens: durations (short3 / medium1 / medium3) and easing.
 class Motion {
-  static const fast = Duration(milliseconds: 120);
-  static const standard = Duration(milliseconds: 220);
-  static const slow = Duration(milliseconds: 320);
+  static const fast = Duration(milliseconds: 150);
+  static const standard = Duration(milliseconds: 250);
+  static const slow = Duration(milliseconds: 350);
 
-  static const standardCurve = Curves.easeOutCubic;
+  static const standardCurve = Easing.standard;
+  static const enter = Easing.emphasizedDecelerate;
+  static const exit = Easing.emphasizedAccelerate;
 }

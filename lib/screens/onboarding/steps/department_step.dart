@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/departments.dart';
 import '../../../models/institute.dart';
 import '../widgets/pick_row.dart';
-import '../widgets/search_field.dart';
+import '../../../widgets/search_field.dart';
 import '../widgets/step_scaffold.dart';
 
 class DepartmentStep extends StatefulWidget {
