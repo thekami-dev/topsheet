@@ -94,15 +94,7 @@ ColorScheme _schemeFor(PaletteColors p, Brightness brightness) {
     brightness: brightness,
   );
   Color mix(Color a, Color b, double t) => Color.lerp(a, b, t)!;
-  final onError =
-      ThemeData.estimateBrightnessForColor(p.error) == Brightness.light
-      ? Colors.black
-      : Colors.white;
   return seeded.copyWith(
-    primary: p.accent,
-    onPrimary: p.onAccent,
-    error: p.error,
-    onError: onError,
     surface: p.bg,
     onSurface: p.text,
     onSurfaceVariant: p.text2,
@@ -125,7 +117,10 @@ ThemeData _buildTheme({required bool isDark, required PaletteColors p}) {
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
-    appBarTheme: const AppBarTheme(centerTitle: false),
+    appBarTheme: const AppBarTheme(
+      centerTitle: false,
+      scrolledUnderElevation: 0,
+    ),
     dividerTheme: DividerThemeData(color: scheme.outlineVariant),
     inputDecorationTheme: InputDecorationTheme(
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),

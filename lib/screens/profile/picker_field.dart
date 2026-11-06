@@ -29,6 +29,17 @@ class PickerField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = enabled && !loading;
+    // suffixIcon is forced to at least 48x48, so the icon sits inside
+    // padding (14 + 20 + 14) instead of being stretched to 48.
+    final Widget suffix = Padding(
+      padding: const EdgeInsets.all(14),
+      child: loading
+          ? const CircularProgressIndicator(strokeWidth: 2)
+          : HugeIcon(
+              icon: icon ?? HugeIcons.strokeRoundedArrowDown01,
+              size: 20,
+            ),
+    );
     return Semantics(
       button: true,
       enabled: active,
@@ -45,19 +56,7 @@ class PickerField extends StatelessWidget {
             helperText: enabled ? null : disabledHint,
             errorText: errorText,
             enabled: enabled,
-            suffixIcon: loading
-                ? const Padding(
-                    padding: EdgeInsets.all(14),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : HugeIcon(
-                    icon: icon ?? HugeIcons.strokeRoundedArrowDown01,
-                    size: 20,
-                  ),
+            suffixIcon: suffix,
           ),
           child: Text(value ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
         ),
