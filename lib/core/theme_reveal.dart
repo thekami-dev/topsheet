@@ -4,18 +4,21 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-/// Circular theme switch: the new theme grows out of the tapped control.
+/// Telegram-style theme switch: a circle grows from the tapped control and
+/// reveals the new theme across the whole app.
 ///
-/// Why it is smooth: the app is captured twice (before and after the theme
-/// change, the change itself happens while the old picture covers the
-/// screen). The animation then only draws two static pictures, one of them
-/// clipped by a growing circle, so nothing is rebuilt while it runs.
+/// How it stays smooth: ONE picture of the old UI is taken and laid over the
+/// screen. In the same frame the theme is switched underneath and the circle
+/// starts growing. The circle starts slowly on purpose: the one-time rebuild
+/// for the new theme happens in those first frames, while the circle is still
+/// tiny, so the hitch is invisible. After that each frame only draws one
+/// static picture with a hole in it.
 class ThemeReveal {
   ThemeReveal._();
   static final ThemeReveal instance = ThemeReveal._();
 
-  static const duration = Duration(milliseconds: 650);
-  static const curve = Curves.easeInOutCubicEmphasized;
+  static const duration = Duration(milliseconds: 600);
+  static const curve = Curves.easeInOutCubic;
 
   final GlobalKey _boundaryKey = GlobalKey();
   _ThemeRevealHostState? _host;
@@ -52,8 +55,7 @@ class _ThemeRevealHostState extends State<ThemeRevealHost>
     duration: ThemeReveal.duration,
   );
 
-  ui.Image? _old;
-  ui.Image? _new;
+  ui.Image? _snap;
   Offset _origin = Offset.zero;
   bool _busy = false;
   bool _running = false;
@@ -69,8 +71,7 @@ class _ThemeRevealHostState extends State<ThemeRevealHost>
     if (ThemeReveal.instance._host == this) {
       ThemeReveal.instance._host = null;
     }
-    _old?.dispose();
-    _new?.dispose();
+    _snap?.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -81,86 +82,60 @@ class _ThemeRevealHostState extends State<ThemeRevealHost>
       .accessibilityFeatures
       .disableAnimations;
 
-  Future<ui.Image?> _capture() async {
-    final boundary =
-        ThemeReveal.instance._boundaryKey.currentContext?.findRenderObject()
-            as RenderRepaintBoundary?;
-    if (boundary == null) return null;
-    try {
-      return await boundary.toImage(
-        pixelRatio: MediaQuery.devicePixelRatioOf(context),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void _finish() {
-    final o = _old;
-    final n = _new;
-    if (mounted) {
-      setState(() {
-        _old = null;
-        _new = null;
-        _running = false;
-        _busy = false;
-      });
-    }
-    o?.dispose();
-    n?.dispose();
-  }
-
   Future<void> _start(Offset globalOrigin, VoidCallback change) async {
     if (_busy || _reduced) {
       change();
       return;
     }
-    _busy = true;
+    final boundary =
+        ThemeReveal.instance._boundaryKey.currentContext?.findRenderObject()
+            as RenderRepaintBoundary?;
+    if (boundary == null) {
+      change();
+      return;
+    }
 
-    // 1) Picture of the current (old) theme.
-    final oldImage = await _capture();
-    if (oldImage == null || !mounted) {
-      oldImage?.dispose();
+    _busy = true;
+    ui.Image? image;
+    try {
+      image = await boundary.toImage(
+        pixelRatio: MediaQuery.devicePixelRatioOf(context),
+      );
+    } catch (_) {
+      image = null;
+    }
+    if (image == null || !mounted) {
+      image?.dispose();
       _busy = false;
       change();
       return;
     }
 
-    // 2) Put it on top so the change below is invisible.
     final box = context.findRenderObject() as RenderBox;
+    // Same frame: cover the screen with the old picture, switch the theme
+    // underneath, start the circle.
     setState(() {
-      _old = oldImage;
-      _new = null;
+      _snap = image;
       _origin = box.globalToLocal(globalOrigin);
       _running = true;
     });
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-
-    // 3) Switch the theme underneath and let it settle.
     change();
-    await WidgetsBinding.instance.endOfFrame;
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-
-    // 4) Picture of the new theme.
-    final newImage = await _capture();
-    if (newImage == null || !mounted) {
-      newImage?.dispose();
-      _finish();
-      return;
-    }
-    setState(() => _new = newImage);
-
-    // 5) Grow the circle.
     _c.value = 0;
     await _c.forward();
-    _finish();
+    if (!mounted) return;
+
+    final old = _snap;
+    setState(() {
+      _snap = null;
+      _running = false;
+      _busy = false;
+    });
+    old?.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final old = _old;
+    final snap = _snap;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -168,7 +143,7 @@ class _ThemeRevealHostState extends State<ThemeRevealHost>
           key: ThemeReveal.instance._boundaryKey,
           child: widget.child,
         ),
-        if (old != null)
+        if (snap != null)
           Positioned.fill(
             child: IgnorePointer(
               child: RepaintBoundary(
@@ -176,8 +151,7 @@ class _ThemeRevealHostState extends State<ThemeRevealHost>
                   animation: _c,
                   builder: (context, _) => CustomPaint(
                     painter: _RevealPainter(
-                      oldImage: old,
-                      newImage: _new,
+                      image: snap,
                       origin: _origin,
                       progress: ThemeReveal.curve.transform(_c.value),
                     ),
@@ -191,40 +165,22 @@ class _ThemeRevealHostState extends State<ThemeRevealHost>
   }
 }
 
+/// Paints the old-theme picture everywhere except inside the growing circle.
 class _RevealPainter extends CustomPainter {
-  final ui.Image oldImage;
-  final ui.Image? newImage;
+  final ui.Image image;
   final Offset origin;
   final double progress;
 
   const _RevealPainter({
-    required this.oldImage,
-    required this.newImage,
+    required this.image,
     required this.origin,
     required this.progress,
   });
 
-  void _draw(Canvas canvas, ui.Image image, Rect dst) {
-    canvas.drawImageRect(
-      image,
-      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-      dst,
-      Paint()..filterQuality = FilterQuality.low,
-    );
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
+    if (progress >= 1) return;
     final full = Offset.zero & size;
-    final next = newImage;
-    if (next == null) {
-      _draw(canvas, oldImage, full);
-      return;
-    }
-    if (progress >= 1) {
-      _draw(canvas, next, full);
-      return;
-    }
     final maxRadius = [
       (origin - full.topLeft).distance,
       (origin - full.topRight).distance,
@@ -232,19 +188,23 @@ class _RevealPainter extends CustomPainter {
       (origin - full.bottomRight).distance,
     ].reduce(math.max);
 
-    _draw(canvas, oldImage, full);
+    // Even-odd fill = full rect minus the circle.
+    final clip = Path()..fillType = PathFillType.evenOdd;
+    clip.addRect(full);
+    clip.addOval(Rect.fromCircle(center: origin, radius: maxRadius * progress));
+
     canvas.save();
-    canvas.clipPath(
-      Path()..addOval(Rect.fromCircle(center: origin, radius: maxRadius * progress)),
+    canvas.clipPath(clip);
+    canvas.drawImageRect(
+      image,
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+      full,
+      Paint()..filterQuality = FilterQuality.low,
     );
-    _draw(canvas, next, full);
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(_RevealPainter old) =>
-      old.progress != progress ||
-      old.newImage != newImage ||
-      old.oldImage != oldImage ||
-      old.origin != origin;
+      old.progress != progress || old.image != image || old.origin != origin;
 }
