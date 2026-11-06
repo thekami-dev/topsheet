@@ -6,6 +6,7 @@ import 'package:hugeicons/hugeicons.dart';
 
 import '../../core/app_themes.dart';
 import '../../core/motion.dart';
+import '../../core/theme_reveal.dart';
 import '../../widgets/pressable.dart';
 
 class ThemeEntry {
@@ -47,7 +48,7 @@ class ThemeGrid extends StatelessWidget {
                     onTap: (origin) {
                       if (e.id == current) return;
                       HapticFeedback.selectionClick();
-                      applyThemePalette(e.id);
+                      ThemeReveal.instance.run(origin, () => applyThemePalette(e.id));
                     },
                   ),
                 ),

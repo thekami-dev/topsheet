@@ -4,18 +4,27 @@ import 'package:flutter/services.dart';
 
 import '../core/app_themes.dart';
 import '../core/theme_previews.dart';
+import '../core/theme_reveal.dart';
 import '../main.dart' show themeModeNotifier, applyThemeMode;
 import 'settings/settings_widgets.dart';
 import 'themes/theme_swatch_grid.dart';
 
-void _setMode(ThemeMode m) {
+/// Runs [change] with the circular reveal, starting inside the control that
+/// [ctx] belongs to. [dx] is how far across its width (0..1) the circle starts.
+void _reveal(BuildContext ctx, VoidCallback change, {double dx = 0.5}) {
   HapticFeedback.selectionClick();
-  applyThemeMode(switch (m) {
-    ThemeMode.light => 'light',
-    ThemeMode.dark => 'dark',
-    ThemeMode.system => 'system',
-  });
+  final box = ctx.findRenderObject() as RenderBox;
+  final origin = box.localToGlobal(
+    Offset(box.size.width * dx, box.size.height / 2),
+  );
+  ThemeReveal.instance.run(origin, change);
 }
+
+String _modeName(ThemeMode m) => switch (m) {
+  ThemeMode.light => 'light',
+  ThemeMode.dark => 'dark',
+  ThemeMode.system => 'system',
+};
 
 class ThemesScreen extends StatelessWidget {
   const ThemesScreen({super.key});
@@ -86,40 +95,57 @@ class ThemesScreen extends StatelessWidget {
                   child: ValueListenableBuilder<ThemeMode>(
                     valueListenable: themeModeNotifier,
                     builder: (context, mode, _) {
-                      return SegmentedButton<ThemeMode>(
-                        segments: const [
-                          ButtonSegment(
-                            value: ThemeMode.system,
-                            label: Text('System'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.light,
-                            label: Text('Light'),
-                          ),
-                          ButtonSegment(
-                            value: ThemeMode.dark,
-                            label: Text('Dark'),
-                          ),
-                        ],
-                        selected: {mode},
-                        onSelectionChanged: (s) => _setMode(s.first),
+                      return Builder(
+                        builder: (ctx) => SegmentedButton<ThemeMode>(
+                          segments: const [
+                            ButtonSegment(
+                              value: ThemeMode.system,
+                              label: Text('System'),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.light,
+                              label: Text('Light'),
+                            ),
+                            ButtonSegment(
+                              value: ThemeMode.dark,
+                              label: Text('Dark'),
+                            ),
+                          ],
+                          selected: {mode},
+                          onSelectionChanged: (s) {
+                            final next = s.first;
+                            if (next == mode) return;
+                            final i = ThemeMode.values.indexOf(next);
+                            _reveal(
+                              ctx,
+                              () => applyThemeMode(_modeName(next)),
+                              dx: (i + 0.5) / 3,
+                            );
+                          },
+                        ),
                       );
                     },
                   ),
                 ),
                 const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  title: const Text('Pure black dark mode'),
-                  subtitle: const Text(
-                    'True black background in dark mode. '
-                    'Saves battery on AMOLED screens.',
+                Builder(
+                  builder: (ctx) => SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    title: const Text('Pure black dark mode'),
+                    subtitle: const Text(
+                      'True black background in dark mode. '
+                      'Saves battery on AMOLED screens.',
+                    ),
+                    value: black,
+                    onChanged: (v) {
+                      if (isDark) {
+                        _reveal(ctx, () => applyThemePureBlack(v), dx: 0.92);
+                      } else {
+                        HapticFeedback.selectionClick();
+                        applyThemePureBlack(v);
+                      }
+                    },
                   ),
-                  value: black,
-                  onChanged: (v) {
-                    HapticFeedback.selectionClick();
-                    applyThemePureBlack(v);
-                  },
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
