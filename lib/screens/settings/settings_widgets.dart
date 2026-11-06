@@ -13,7 +13,9 @@ class SettingsPage extends StatelessWidget {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar.large(title: Text(title)),
+          SliverAppBar(
+            pinned: true,
+            title: Text(title)),
           SliverList(delegate: SliverChildListDelegate(children)),
           SliverToBoxAdapter(
             child: SizedBox(

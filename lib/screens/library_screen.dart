@@ -154,7 +154,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverAppBar.large(
+          SliverAppBar(
+            pinned: true,
+            
             title: const Text('Topsheet'),
             actions: [
               IconButton(
